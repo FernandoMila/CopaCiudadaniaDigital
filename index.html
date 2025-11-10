@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Copa de la Ciudadanía Digital</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px; margin:10px; border:1px solid #ef4444; border-radius:8px; color:#ef4444; background:#1a0f0f;">
+      ⚠️ Este juego necesita JavaScript habilitado para funcionar.
+    </div>
+  </noscript>
+
+  <div class="app">
+    <div class="header">
+      <div class="title">🏆 Copa de la <span class="accent">Ciudadanía Digital</span></div>
+      <div class="meta">
+        <!-- Marca institucional -->
+        <div class="pill accent-text brand-pill">
+          <img src="imagenes/AP.png" alt="AP" class="brand-icon" />
+          <span>Aprender Todos</span>
+        </div>
+        
+      </div>
+    </div>
+
+    <!-- INICIO -->
+    <section id="screen-start" class="card row">
+      <h2>Elegí cómo querés jugar</h2>
+
+      <div class="meta">
+        <button id="mode-solo" class="pill primary">1 Jugador</button>
+        <button id="mode-multi" class="pill">Multijugador (online)</button>
+         <!-- Botón sonido -->
+        <button id="btn-sound" class="pill">🔈 Sonido: ON</button>
+        </div>
+
+      <div class="row grid-2">
+        <!-- IZQUIERDA -->
+        <div class="card row">
+          <h3>👤 Jugador</h3>
+
+          <label for="player-name" class="small">Nombre del jugador</label>
+          <input id="player-name" class="input" type="text" placeholder="Tu nombre o equipo"
+                 maxlength="20" aria-label="Nombre del jugador"
+                 autocomplete="nickname" autocapitalize="none" />
+
+          <label for="room-name" class="small">Nombre de la sala (si vas a crear)</label>
+          <input id="room-name" class="input" type="text" placeholder="Ej: 2ºB Ciudadanía"
+                 maxlength="24" aria-label="Nombre de la sala"
+                 autocapitalize="sentences" />
+
+          <span class="hint">Si dejás vacío el nombre de la sala, se usará “Sala ####”.</span>
+
+          <h3>⚙️ Configuración</h3>
+          <label class="small">Dificultad</label>
+          <div class="meta" id="diff-buttons">
+            <button class="pill" data-diff="Easy">Fácil</button>
+            <button class="pill primary" data-diff="Normal">Normal</button>
+            <button class="pill" data-diff="Hard">Difícil</button>
+          </div>
+
+          <label class="small">Categorías</label>
+          <div class="meta" id="cats"></div>
+          <!--span class="hint">Tip: combiná “Fake News” + “Privacidad”.</span-->
+        </div>
+
+        <!-- DERECHA -->
+        <div class="card row">
+          <div class="logo-wrap">
+            <img src="imagenes/logoETMN.jpeg" alt="Logo ETMN" class="logo-img" />
+          </div>
+
+          <h3>🎯 Objetivo</h3>
+          <p>Resolvé situaciones reales sobre privacidad, convivencia, bienestar y verificación de información.</p>
+          <ul class="small">
+            <li>✔️ Correcta = puntos + medallas</li>
+            <li>❌ Incorrecta = perdés 1 vida (3 total)</li>
+            <li>🪄 Poderes: 50/50 y Saltar</li>
+          </ul>
+
+          <!-- 1 JUGADOR -->
+          <div id="solo-controls" class="row">
+            <button id="btn-start" class="primary">🎮 Empezar partida (1 jugador)</button>
+          </div>
+
+          <!-- MULTIJUGADOR -->
+          <div id="multi-controls" class="row hidden">
+            <div class="meta">
+              <button id="btn-create-room" class="success">➕ Crear sala</button>
+              <button id="btn-join-room" class="pill">↪️ Unirse a sala</button>
+            </div>
+
+            <div id="join-panel" class="row hidden">
+              <label class="small" for="join-code">Código de sala (4 dígitos)</label>
+              <input id="join-code" class="input" type="text" placeholder="Ej: 4821"
+                     maxlength="4" inputmode="numeric" pattern="\\d{4}"
+                     aria-label="Código de la sala" autocomplete="one-time-code" />
+              <button id="btn-join-confirm" class="primary">Entrar</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Solo el botón de ranking -->
+            <div class="meta" style="justify-content:center;">
+              <button id="btn-start-lb-full" class="pill">🏅 Ver ranking</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOBBY -->
+    <section id="screen-lobby" class="card row hidden">
+      <h2>👥 Sala: <span id="lobby-room-name">—</span> · Código: <span id="lobby-room-code">—</span></h2>
+
+      <div class="row grid-2">
+        <div class="card">
+          <h3>Jugadores conectados</h3>
+          <p class="small">🟢 Esperando jugadores...</p>
+          <ul id="lobby-players" class="small"></ul>
+        </div>
+
+        <div class="card row">
+          <h3>Invitá a otros</h3>
+          <div class="meta" style="align-items:center; gap:12px;">
+            <div id="qr" style="width:128px;height:128px;background:#0b1222;border:1px solid #263247;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+              <span class="small" style="color:#94a3b8;">QR</span>
+            </div>
+            <div class="row" style="min-width:0;">
+              <label class="small">Enlace de la sala</label>
+              <div id="lobby-room-link" class="small" style="word-break:break-all;"></div>
+              <div class="meta" style="margin-top:6px;">
+                <button id="btn-copy-link" class="pill">📋 Copiar enlace</button>
+              </div>
+            </div>
+          </div>
+
+          <h3>Controles del host</h3>
+          <p class="hint">Solo quien creó la sala puede iniciar.</p>
+          <div class="meta">
+            <button id="btn-lobby-start" class="primary">🚀 Iniciar partida</button>
+            <button id="btn-lobby-leave" class="pill">Salir</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Juego -->
+    <section id="screen-game" class="card row hidden" aria-live="polite">
+      <div class="footer">
+        <div class="kpis">
+          <div class="kpi"><span class="small">Jugador</span><strong id="ui-player">—</strong></div>
+          <div class="kpi"><span class="small">Puntos</span><strong id="points">0</strong></div>
+          <div class="kpi"><span class="small">Vidas</span><strong id="lives">❤️❤️❤️</strong></div>
+          <div class="kpi"><span class="small">Ronda</span><strong id="round">1</strong></div>
+          <div class="kpi"><span class="small">Tiempo</span><strong id="time">60s</strong></div>
+        </div>
+        <div class="meta">
+          <button id="power-5050" class="pill">🪄 Verificar fuente (50/50)</button>
+          <button id="power-skip" class="pill">🛡️ Escudo de privacidad (Saltar)</button>
+        </div>
+      </div>
+
+      <div class="progress"><div id="progress" class="bar"></div></div>
+
+      <div id="qcard" class="row">
+        <div class="badge" id="qcat">Categoría</div>
+        <div class="question" id="qtext">...</div>
+        <div id="answers" class="answers"></div>
+        <div id="explain" class="hint"></div>
+      </div>
+
+      <div class="footer">
+        <button id="next" class="primary hidden">Siguiente ➜</button>
+        <span class="small">Competencias: <b>Seguridad</b>, <b>Empatía</b>, <b>Pensamiento crítico</b>, <b>Bienestar</b>.</span>
+      </div>
+    </section>
+
+    <!-- Ranking completo -->
+    <section id="screen-leaderboard" class="card row hidden">
+      <h2>🏅 Ranking (Top 10)</h2>
+      <div class="row">
+        <div class="meta">
+          <button id="btn-back-home" class="pill">⬅️ Volver</button>
+          <button id="btn-clear" class="pill">🗑️ Borrar histórico</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>#</th><th>Jugador</th><th>Puntos</th><th>Dificultad</th><th>Fecha</th></tr>
+            </thead>
+            <tbody id="lb-body"></tbody>
+          </table>
+        </div>
+        <p class="small">El ranking se guarda en este navegador/equipo (LocalStorage).</p>
+      </div>
+    </section>
+
+    <!-- Final -->
+    <section id="screen-end" class="card row hidden">
+      <h2>🏁 ¡Fin de la partida!</h2>
+      <p class="small">Resumen de tu desempeño</p>
+      <div class="row grid-2">
+        <div class="card">
+          <div class="kpis">
+            <div class="kpi"><span class="small">Jugador</span><strong id="sum-player">—</strong></div>
+            <div class="kpi"><span class="small">Puntos</span><strong id="sum-points">0</strong></div>
+            <div class="kpi"><span class="small">Rondas</span><strong id="sum-rounds">0</strong></div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div class="badge">🎖️ Seguridad: <span id="med-sec">0</span></div>
+            <div class="badge">💙 Empatía: <span id="med-emp">0</span></div>
+            <div class="badge">🧠 Crítico: <span id="med-crit">0</span></div>
+            <div class="badge">🌿 Bienestar: <span id="med-bien">0</span></div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div class="badge" id="final-position">Posición en ranking: —</div>
+          </div>
+        </div>
+        <div class="card row">
+          <h3>Compartir / Jugar de nuevo</h3>
+          <div class="meta">
+            <button id="share" class="pill">📋 Copiar mi puntaje</button>
+            <button id="see-leaderboard" class="pill">🏅 Ver ranking</button>
+            <button id="restart" class="success">Nueva partida</button>
+          </div>
+          <p class="hint">El puntaje incluye bonus por tiempo y multiplicador por dificultad.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+
+  <!-- QRCode -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Lógica principal -->
+  <script src="app.js"></script>
+</body>
+</html>
