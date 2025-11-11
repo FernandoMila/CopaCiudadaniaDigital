@@ -1,8 +1,8 @@
 /*******************************************************
  *  Copa de la Ciudadanía Digital — app.js (COMPLETO)
  *  - Modo 1 jugador y Multijugador (Firebase RTDB)
- *  - Salas con código de 4 dígitos y enlace/QR (el QR lo genera index.html)
- *  - Ranking local (LocalStorage)
+ *  - Salas con código de 4 dígitos y enlace/QR
+ *  - Ranking local (LocalStorage) + global (Firebase)
  *  - Sonidos: inicio / espera (lobby) / juego / final
  *  - Botón “Nueva partida” vuelve al inicio y sale de la sala si corresponde
  *  - Invitados: no pueden cambiar dificultad/categorías (las define el host)
@@ -13,8 +13,6 @@
  ***********************/
 const FIREBASE_ENABLED = true;
 
-// ⚠️ IMPORTANTE: si tu Realtime DB no está en modo lectura/escritura pública,
-// ajustá las reglas en la consola para permitir pruebas (luego restringí).
 const firebaseConfig = {
   apiKey: "AIzaSyBUJLB57u7uw48G9LyRplDO-x8tQ8gVEGM",
   authDomain: "copa-387c8.firebaseapp.com",
@@ -27,17 +25,19 @@ const firebaseConfig = {
 };
 
 let fbApp = null, fbDb = null;
-if (FIREBASE_ENABLED) {
+if (FIREBASE_ENABLED && window.firebase) {
   fbApp = firebase.initializeApp(firebaseConfig);
   fbDb  = firebase.database();
   console.log("✅ Firebase conectado");
+} else {
+  console.warn("⚠️ Firebase no disponible, solo funcionará el modo local.");
 }
 
 /*******************************************************
  *  SONIDOS
  *******************************************************/
 const sfx = {
-  enabled: true,      // cambialo a false si querés iniciar muteado
+  enabled: true,      // si querés que arranque muteado, poné false
   unlocked: false,    // se vuelve true tras el primer gesto del usuario
   clips: {
     inicio: new Audio('sonidos/inicio.mp3'),
@@ -46,6 +46,7 @@ const sfx = {
     end:    new Audio('sonidos/fin2.mp3')
   }
 };
+
 sfx.clips.inicio.loop = true;
 sfx.clips.lobby.loop  = true;
 sfx.clips.game.loop   = true;
@@ -61,15 +62,16 @@ function sfxStopAll(){
     try { a.pause(); a.currentTime = 0; } catch(e){}
   });
 }
+
 function sfxPlay(name){
-  if(!sfx.enabled) return;
+  if (!sfx.enabled || !sfx.unlocked) return;
   const a = sfx.clips[name];
   if(!a) return;
-  a.play().catch(()=>{/* puede requerir 1er gesto del usuario */});
+  a.play().catch(()=>{/* algunos navegadores pueden bloquear si no hay gesto */});
 }
 
 /*******************************************************
- *  BANCO DE PREGUNTAS (ejemplo — extendelo con tus 40+)
+ *  BANCO DE PREGUNTAS (ejemplo)
  *******************************************************/
 const QUESTIONS = [
   {
@@ -205,15 +207,25 @@ const QUESTIONS = [
 ];
 
 /*******************************************************
- *  Ranking (LocalStorage)
+ *  Ranking (LocalStorage + Firebase)
  *******************************************************/
 const STORAGE_KEY="cd_scores_v1", STORAGE_PLAYER="cd_last_player";
+
 function loadScores(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")||[]}catch{return[]} }
 function saveScores(a){ localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); }
-function addScore(e){ const a=loadScores(); a.push(e); saveScores(a.slice(-200)); }
-function getSortedAll(){ return loadScores().sort((a,b)=> b.points-a.points || a.ts-b.ts); }
-function getTop(n=10){ return getSortedAll().slice(0,n); }
-function clearScores(){ localStorage.removeItem(STORAGE_KEY); }
+function addScoreLocal(e){
+  const a=loadScores();
+  a.push(e);
+  saveScores(a.slice(-200)); // guardamos hasta 200 últimos
+}
+function getSortedAllLocal(){ return loadScores().sort((a,b)=> b.points-a.points || a.ts-b.ts); }
+function getTopLocal(n=10){ return getSortedAllLocal().slice(0,n); }
+function clearScoresLocal(){ localStorage.removeItem(STORAGE_KEY); }
+
+function addScoreCloud(entry){
+  if(!FIREBASE_ENABLED || !fbDb) return;
+  fbDb.ref("/scores").push(entry).catch(err=>console.warn("No se pudo guardar en Firebase",err));
+}
 
 /*******************************************************
  *  Estado + helpers
@@ -235,9 +247,8 @@ function setKpis(){ $("#points").textContent=state.points; $("#round").textConte
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
 function diffMult(){ return state.difficulty==="Hard"?1.3:state.difficulty==="Easy"?0.8:1.0; }
 function formatDate(ts){ return new Date(ts).toLocaleString([], {hour12:false}); }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;","&gt;":">","\"":"&quot;","'":"&#39;"}[c]||c)); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;","\>":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c)); }
 
-/* Pantalla visible → útil para sonido al desbloquear */
 function getCurrentScreenId(){
   const ids = ["#screen-start","#screen-lobby","#screen-game","#screen-end","#screen-leaderboard"];
   for (const id of ids){
@@ -253,8 +264,9 @@ function show(id){
     .forEach(s=>$(s)?.classList.add("hidden"));
   $(id)?.classList.remove("hidden");
 
-  // 🎵 Sonidos por pantalla
   sfxStopAll();
+  if (!sfx.enabled || !sfx.unlocked) return;
+
   if (id === "#screen-start")      sfxPlay("inicio");
   else if (id === "#screen-lobby") sfxPlay("lobby");
   else if (id === "#screen-game")  sfxPlay("game");
@@ -268,14 +280,14 @@ function lockConfig(lock){
 }
 
 /*******************************************************
- *  Desbloqueo global de audio (móviles)
+ *  Desbloqueo global de audio (móviles / GitHub Pages)
  *******************************************************/
 function setupAudioUnlock(){
   const tryUnlock = () => {
     if (sfx.unlocked) return;
     sfx.unlocked = true;
 
-    // priming de cada clip
+    // "Priming" de cada clip dentro del gesto del usuario
     Object.values(sfx.clips).forEach(a=>{
       try { a.play().then(()=>a.pause()).catch(()=>{}); } catch(e){}
     });
@@ -286,6 +298,10 @@ function setupAudioUnlock(){
     else if (current === "#screen-lobby")  sfxPlay("lobby");
     else if (current === "#screen-game")   sfxPlay("game");
     else if (current === "#screen-end")    sfxPlay("end");
+
+    document.removeEventListener("click", tryUnlock);
+    document.removeEventListener("touchstart", tryUnlock);
+    document.removeEventListener("keydown", tryUnlock);
   };
 
   document.addEventListener("click", tryUnlock);
@@ -294,7 +310,7 @@ function setupAudioUnlock(){
 }
 
 /*******************************************************
- *  Inicio (montaje)
+ *  Inicio (montaje UI)
  *******************************************************/
 function mountStart(){
   const last=(localStorage.getItem(STORAGE_PLAYER)||"").trim();
@@ -305,7 +321,8 @@ function mountStart(){
   if (btnSound){
     const refreshLabel = () => btnSound.textContent = sfx.enabled ? "🔈 Sonido: ON" : "🔇 Sonido: OFF";
     refreshLabel();
-    btnSound.addEventListener("click", ()=>{
+    btnSound.addEventListener("click", e=>{
+      e.stopPropagation();
       sfx.enabled = !sfx.enabled;
       refreshLabel();
       if(!sfx.enabled) sfxStopAll();
@@ -364,8 +381,8 @@ function mountStart(){
   $("#btn-start-lb-full")?.addEventListener("click", ()=>{ renderLeaderboard(); show("#screen-leaderboard"); });
   $("#btn-back-home")?.addEventListener("click", ()=> show("#screen-start"));
   $("#btn-clear")?.addEventListener("click", ()=>{
-    if(confirm("¿Seguro que querés borrar el histórico?")){
-      clearScores(); renderLeaderboard();
+    if(confirm("¿Seguro que querés borrar el histórico local?")){
+      clearScoresLocal(); renderLeaderboard();
     }
   });
   $("#see-leaderboard")?.addEventListener("click", ()=>{ renderLeaderboard(); show("#screen-leaderboard"); });
@@ -427,6 +444,7 @@ function firebaseEventsPath(code){ return `/rooms/${code}/events`; }
 function firebaseRosterPath(code){ return `/rooms/${code}/roster`; }
 
 function openChannel(code){
+  if(!fbDb) return;
   closeChannel();
 
   fbEventsRef = fbDb.ref(firebaseEventsPath(code));
@@ -438,17 +456,21 @@ function openChannel(code){
   fbRosterRef = fbDb.ref(firebaseRosterPath(code));
   fbRosterListener = fbRosterRef.on("value", snap=>{
     const data = snap.val() || {};
-    state.peers = new Map(Object.entries(data).map(([peerId,info])=>[peerId,{name:info.name}]));
+    state.peers = new Map(
+      Object.entries(data).map(([peerId,info])=>[peerId,{name:info.name}])
+    );
     renderLobbyPlayers();
   });
 }
+
 function closeChannel(){
   if(fbEventsRef && fbEventsListener){ fbEventsRef.off('child_added', fbEventsListener); }
   if(fbRosterRef && fbRosterListener){ fbRosterRef.off('value', fbRosterListener); }
   fbEventsRef=fbEventsListener=fbRosterRef=fbRosterListener=null;
 }
+
 function sendRoom(type, payload={}){
-  if(!state.roomCode) return;
+  if(!state.roomCode || !fbDb) return;
   const msg={type, payload, from: state.player, ts: Date.now()};
   fbDb.ref(firebaseEventsPath(state.roomCode)).push(msg);
 }
@@ -461,7 +483,7 @@ function genCode4(){ return String(Math.floor(1000+Math.random()*9000)); }
 function updateLobbyList(name, peerId){
   if(!peerId) peerId = `${name}-${Math.random().toString(36).slice(2,7)}`;
   state.peers.set(peerId, {name});
-  if(state.roomCode){
+  if(state.roomCode && fbDb){
     fbDb.ref(firebaseRosterPath(state.roomCode)+"/"+peerId).set({name});
   }
   renderLobbyPlayers();
@@ -470,12 +492,19 @@ function updateLobbyList(name, peerId){
 function renderLobbyPlayers(){
   const ul=$("#lobby-players"); if(!ul) return;
   ul.innerHTML="";
-  if(state.host){ const liHost=document.createElement("li"); liHost.textContent=`👑 ${state.player} (host)`; ul.appendChild(liHost); }
-  [...state.peers.values()].forEach(p=>{ const li=document.createElement("li"); li.textContent=`👤 ${p.name}`; ul.appendChild(li); });
+  if(state.host){
+    const liHost=document.createElement("li");
+    liHost.textContent=`👑 ${state.player} (host)`;
+    ul.appendChild(liHost);
+  }
+  [...state.peers.values()].forEach(p=>{
+    const li=document.createElement("li");
+    li.textContent=`👤 ${p.name}`;
+    ul.appendChild(li);
+  });
 }
 
 function updateShareArtifacts(){
-  // el QR y link los arma index.html con #qr y #lobby-room-link
   if(!state.roomCode) return;
   const shareUrl = `${location.origin}${location.pathname}?room=${state.roomCode}`;
   const linkEl = $("#lobby-room-link");
@@ -494,7 +523,6 @@ function updateShareArtifacts(){
     };
   }
 
-  // QR: lo generás en index.html con la librería qrcodejs y el div #qr
   if (window.QRCode) {
     const qrEl = $("#qr");
     if(qrEl){
@@ -505,6 +533,8 @@ function updateShareArtifacts(){
 }
 
 function createRoomFlow(){
+  if(!fbDb){ alert("Firebase no está disponible. Solo podés usar 1 jugador."); return; }
+
   captureName();
   state.mode="host"; state.host=true;
   const inputRoomName = ($("#room-name")?.value || "").trim();
@@ -534,6 +564,8 @@ function createRoomFlow(){
 }
 
 function joinRoomFlow(){
+  if(!fbDb){ alert("Firebase no está disponible. Solo podés usar 1 jugador."); return; }
+
   captureName();
   const code=($("#join-code")?.value||"").trim();
   if(!/^\d{4}$/.test(code)){ alert("Ingresá un código de 4 dígitos válido."); return; }
@@ -574,7 +606,7 @@ function applyStartPayload(p){
   state.difficulty=p.difficulty;
   state.selectedCats=new Set(p.selectedCats);
 
-  if (!state.host) lockConfig(true); // invitados siguen bloqueados
+  if (!state.host) lockConfig(true);
 
   state.pool=(p.poolIdxs||[]).map(i=>QUESTIONS[i]);
   if(!state.pool.length){ state.pool=QUESTIONS.slice(); shuffle(state.pool); }
@@ -584,10 +616,9 @@ function applyStartPayload(p){
 }
 
 function leaveRoom(){
-  if(state.roomCode){
+  if(state.roomCode && fbDb){
     const peerId=`${state.player}-leave`;
     sendRoom("leave",{peerId});
-    // mejor esfuerzo por sacar del roster
     fbDb.ref(firebaseRosterPath(state.roomCode)).once("value").then(snap=>{
       const roster=snap.val()||{};
       Object.keys(roster).forEach(pid=>{
@@ -610,7 +641,6 @@ function handleRoomMessage({type, payload}={}){
 
   if(type==="hello" && state.host){
     updateLobbyList(payload.playerName, payload.peerId);
-    // devolvemos roster
     const players=[...state.peers.entries()].map(([peerId,info])=>({peerId,name:info.name}));
     sendRoom("roster", { players });
   }
@@ -716,6 +746,7 @@ $("#power-5050")?.addEventListener("click",()=>{
   shuffle(incorrect).slice(0,toHide).forEach(b=>{ b.classList.add("hidden"); b.disabled=true; });
   state.used5050=true; $("#power-5050").disabled=true;
 });
+
 $("#power-skip")?.addEventListener("click",()=>{
   if(state.usedSkip) return;
   state.usedSkip=true; $("#power-skip").disabled=true; state.points+=20;
@@ -734,13 +765,20 @@ function endGame(){
   const mult=diffMult(), bonusTiempo=Math.max(0,state.time)*2;
   state.finalScore=Math.round(state.points*mult + bonusTiempo);
 
-  const entry={ name:state.player, points:state.finalScore,
+  const entry={
+    name:state.player,
+    points:state.finalScore,
     difficulty:(state.difficulty==="Easy"?"Fácil":state.difficulty==="Hard"?"Difícil":"Normal"),
-    medals:{...state.medals}, ts:Date.now()
+    medals:{...state.medals},
+    ts:Date.now()
   };
-  addScore(entry);
 
-  const allSorted=getSortedAll(); const pos=allSorted.findIndex(e=>e.ts===entry.ts)+1; state.finalPosition=pos||null;
+  // local + nube
+  addScoreLocal(entry);
+  addScoreCloud(entry);
+
+  const allSorted=getSortedAllLocal(); // para posición aproximada local
+  const pos=allSorted.findIndex(e=>e.ts===entry.ts)+1; state.finalPosition=pos||null;
 
   show("#screen-end");
   $("#sum-player").textContent=state.player;
@@ -754,12 +792,12 @@ function endGame(){
 }
 
 /*******************************************************
- *  Ranking + compartir
+ *  Ranking + compartir (Firebase + local fallback)
  *******************************************************/
-function renderLeaderboard(){
+function renderLeaderboardLocal(){
   const tbody=$("#lb-body"); if(!tbody) return;
   tbody.innerHTML="";
-  const top=getTop(10);
+  const top=getTopLocal(10);
   if(!top.length){
     const tr=document.createElement("tr");
     tr.innerHTML=`<td colspan="5" class="small">No hay puntajes aún. ¡Jugá una partida!</td>`;
@@ -770,6 +808,42 @@ function renderLeaderboard(){
     tr.innerHTML=`<td>${i+1}</td><td>${escapeHtml(e.name)}</td><td>${e.points}</td><td>${e.difficulty}</td><td>${formatDate(e.ts)}</td>`;
     tbody.appendChild(tr);
   });
+}
+
+function renderLeaderboard(){
+  const tbody=$("#lb-body"); if(!tbody) return;
+  tbody.innerHTML="";
+
+  if(!FIREBASE_ENABLED || !fbDb){
+    renderLeaderboardLocal();
+    return;
+  }
+
+  fbDb.ref("/scores").orderByChild("points").limitToLast(50).once("value")
+    .then(snap=>{
+      const rows = [];
+      snap.forEach(child=>{
+        const v = child.val();
+        if(v && typeof v.points === "number") rows.push(v);
+      });
+      rows.sort((a,b)=> b.points - a.points || (a.ts||0) - (b.ts||0));
+      const top = rows.slice(0,10);
+
+      if(!top.length){
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td colspan="5" class="small">No hay puntajes aún. ¡Jugá una partida!</td>`;
+        tbody.appendChild(tr); return;
+      }
+      top.forEach((e,i)=>{
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td>${i+1}</td><td>${escapeHtml(e.name)}</td><td>${e.points}</td><td>${e.difficulty||"-"}</td><td>${formatDate(e.ts||Date.now())}</td>`;
+        tbody.appendChild(tr);
+      });
+    })
+    .catch(err=>{
+      console.warn("Error leyendo ranking global, uso local",err);
+      renderLeaderboardLocal();
+    });
 }
 
 function shareScore(){
@@ -802,11 +876,7 @@ function checkRoomParamOnLoad(){
  *******************************************************/
 function init(){
   mountStart();
-
-  // Asegura que se ejecute la lógica de sonido del inicio
-  show("#screen-start");
-
-  // Desbloqueo de audio para móviles
-  setupAudioUnlock();
+  show("#screen-start");     // pantalla inicial (sin audio aún)
+  setupAudioUnlock();        // desbloqueo de audio para móviles / GitHub
 }
 init();
