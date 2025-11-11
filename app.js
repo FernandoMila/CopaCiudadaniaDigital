@@ -38,7 +38,7 @@ if (FIREBASE_ENABLED && window.firebase) {
  *******************************************************/
 const sfx = {
   enabled: true,      // si querés que arranque muteado, poné false
-  unlocked: false,    // se vuelve true tras el primer gesto del usuario
+  unlocked: false,    // se vuelve true la primera vez que tocás el botón de sonido
   clips: {
     inicio: new Audio('sonidos/inicio.mp3'),
     lobby:  new Audio('sonidos/espera.mp3'),
@@ -67,7 +67,7 @@ function sfxPlay(name){
   if (!sfx.enabled || !sfx.unlocked) return;
   const a = sfx.clips[name];
   if(!a) return;
-  a.play().catch(()=>{/* algunos navegadores pueden bloquear si no hay gesto */});
+  a.play().catch(()=>{/* puede fallar si el navegador se pone estricto */});
 }
 
 /*******************************************************
@@ -247,7 +247,7 @@ function setKpis(){ $("#points").textContent=state.points; $("#round").textConte
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
 function diffMult(){ return state.difficulty==="Hard"?1.3:state.difficulty==="Easy"?0.8:1.0; }
 function formatDate(ts){ return new Date(ts).toLocaleString([], {hour12:false}); }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;","\>":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c)); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c)); }
 
 function getCurrentScreenId(){
   const ids = ["#screen-start","#screen-lobby","#screen-game","#screen-end","#screen-leaderboard"];
@@ -280,36 +280,6 @@ function lockConfig(lock){
 }
 
 /*******************************************************
- *  Desbloqueo global de audio (móviles / GitHub Pages)
- *******************************************************/
-function setupAudioUnlock(){
-  const tryUnlock = () => {
-    if (sfx.unlocked) return;
-    sfx.unlocked = true;
-
-    // "Priming" de cada clip dentro del gesto del usuario
-    Object.values(sfx.clips).forEach(a=>{
-      try { a.play().then(()=>a.pause()).catch(()=>{}); } catch(e){}
-    });
-
-    // reproducir lo que corresponda a la pantalla visible
-    const current = getCurrentScreenId();
-    if      (current === "#screen-start")  sfxPlay("inicio");
-    else if (current === "#screen-lobby")  sfxPlay("lobby");
-    else if (current === "#screen-game")   sfxPlay("game");
-    else if (current === "#screen-end")    sfxPlay("end");
-
-    document.removeEventListener("click", tryUnlock);
-    document.removeEventListener("touchstart", tryUnlock);
-    document.removeEventListener("keydown", tryUnlock);
-  };
-
-  document.addEventListener("click", tryUnlock);
-  document.addEventListener("touchstart", tryUnlock);
-  document.addEventListener("keydown", tryUnlock);
-}
-
-/*******************************************************
  *  Inicio (montaje UI)
  *******************************************************/
 function mountStart(){
@@ -321,18 +291,36 @@ function mountStart(){
   if (btnSound){
     const refreshLabel = () => btnSound.textContent = sfx.enabled ? "🔈 Sonido: ON" : "🔇 Sonido: OFF";
     refreshLabel();
+
     btnSound.addEventListener("click", e=>{
       e.stopPropagation();
+
+      // toggle
       sfx.enabled = !sfx.enabled;
       refreshLabel();
-      if(!sfx.enabled) sfxStopAll();
-      else {
-        const current = getCurrentScreenId();
-        if      (current === "#screen-start")  sfxPlay("inicio");
-        else if (current === "#screen-lobby")  sfxPlay("lobby");
-        else if (current === "#screen-game")   sfxPlay("game");
-        else if (current === "#screen-end")    sfxPlay("end");
+
+      if (!sfx.enabled){
+        sfxStopAll();
+        return;
       }
+
+      // Primera vez que se enciende: desbloquear audio
+      if (!sfx.unlocked){
+        sfx.unlocked = true;
+        Object.values(sfx.clips).forEach(a=>{
+          try {
+            a.play().then(()=>a.pause()).catch(()=>{});
+          } catch(e){}
+        });
+      }
+
+      // Reproducir según pantalla actual
+      const current = getCurrentScreenId();
+      sfxStopAll();
+      if      (current === "#screen-start")  sfxPlay("inicio");
+      else if (current === "#screen-lobby")  sfxPlay("lobby");
+      else if (current === "#screen-game")   sfxPlay("game");
+      else if (current === "#screen-end")    sfxPlay("end");
     });
   }
 
@@ -344,6 +332,9 @@ function mountStart(){
     $("#solo-controls").classList.remove("hidden");
     $("#multi-controls").classList.add("hidden");
     lockConfig(false);
+
+    // cambiar a música de inicio si sonido está activo
+    show("#screen-start");
   });
   $("#mode-multi")?.addEventListener("click",()=>{
     state.mode="host"; state.host=true;
@@ -352,6 +343,8 @@ function mountStart(){
     $("#solo-controls").classList.add("hidden");
     $("#multi-controls").classList.remove("hidden");
     lockConfig(false);
+
+    show("#screen-start");
   });
 
   // Dificultad
@@ -431,6 +424,9 @@ function goToGameAndStart(){
   renderQuestion(); setLivesUI(); setKpis(); setProgress();
   $("#power-5050").disabled=false; $("#power-skip").disabled=false; $("#explain").textContent="";
   startTimer();
+
+  sfxStopAll();
+  sfxPlay("game");
 }
 
 /*******************************************************
@@ -561,6 +557,9 @@ function createRoomFlow(){
 
   const shareUrl = `${location.origin}${location.pathname}?room=${state.roomCode}`;
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(shareUrl).catch(()=>{});
+
+  sfxStopAll();
+  sfxPlay("lobby");
 }
 
 function joinRoomFlow(){
@@ -586,6 +585,9 @@ function joinRoomFlow(){
   renderLobbyPlayers();
   show("#screen-lobby");
   updateShareArtifacts();
+
+  sfxStopAll();
+  sfxPlay("lobby");
 }
 
 function hostStartMatch(){
@@ -631,6 +633,9 @@ function leaveRoom(){
   state.roomCode=null; state.roomName=null; state.host=false; state.mode="solo"; state.peers.clear();
   lockConfig(false);
   show("#screen-start");
+
+  sfxStopAll();
+  sfxPlay("inicio");
 }
 
 /*******************************************************
@@ -789,6 +794,9 @@ function endGame(){
   $("#med-crit").textContent=state.medals.critico;
   $("#med-bien").textContent=state.medals.bienestar;
   $("#final-position").textContent=`Posición en ranking: ${state.finalPosition ?? "—"}`;
+
+  sfxStopAll();
+  sfxPlay("end");
 }
 
 /*******************************************************
@@ -876,7 +884,6 @@ function checkRoomParamOnLoad(){
  *******************************************************/
 function init(){
   mountStart();
-  show("#screen-start");     // pantalla inicial (sin audio aún)
-  setupAudioUnlock();        // desbloqueo de audio para móviles / GitHub
+  show("#screen-start");     // pantalla inicial (sin audio hasta tocar el botón)
 }
 init();
