@@ -4,8 +4,7 @@
  *  - Salas con código de 4 dígitos y enlace/QR
  *  - Ranking local (LocalStorage) + global (Firebase)
  *  - Sonidos: inicio / espera (lobby) / juego / final
- *  - Botón “Nueva partida” vuelve al inicio y sale de la sala si corresponde
- *  - Invitados: no pueden cambiar dificultad/categorías (las define el host)
+ *  - Control de volumen + botón ON/OFF
  *******************************************************/
 
 /***********************
@@ -37,8 +36,9 @@ if (FIREBASE_ENABLED && window.firebase) {
  *  SONIDOS
  *******************************************************/
 const sfx = {
-  enabled: true,      // si querés que arranque muteado, poné false
-  unlocked: false,    // se vuelve true la primera vez que tocás el botón de sonido
+  enabled: true,
+  unlocked: false,   // se desbloquea la 1ª vez que tocan el botón
+  master: 0.8,       // volumen general (0 a 1)
   clips: {
     inicio: new Audio('sonidos/inicio.mp3'),
     lobby:  new Audio('sonidos/espera.mp3'),
@@ -47,15 +47,26 @@ const sfx = {
   }
 };
 
+// Volumen base por tipo de música
+const BASE_VOL = {
+  inicio: 0.8,
+  lobby:  0.8,
+  game:   0.7,
+  end:    1.0
+};
+
+function applyVolumes(){
+  Object.entries(sfx.clips).forEach(([key, audio])=>{
+    const base = BASE_VOL[key] ?? 0.5;
+    audio.volume = base * sfx.master;
+  });
+}
+applyVolumes();
+
 sfx.clips.inicio.loop = true;
 sfx.clips.lobby.loop  = true;
 sfx.clips.game.loop   = true;
 sfx.clips.end.loop    = false;
-
-sfx.clips.inicio.volume = 0.25;
-sfx.clips.lobby.volume  = 0.25;
-sfx.clips.game.volume   = 0.22;
-sfx.clips.end.volume    = 0.30;
 
 function sfxStopAll(){
   Object.values(sfx.clips).forEach(a=>{
@@ -67,11 +78,11 @@ function sfxPlay(name){
   if (!sfx.enabled || !sfx.unlocked) return;
   const a = sfx.clips[name];
   if(!a) return;
-  a.play().catch(()=>{/* puede fallar si el navegador se pone estricto */});
+  a.play().catch(()=>{});
 }
 
 /*******************************************************
- *  BANCO DE PREGUNTAS (ejemplo)
+ *  BANCO DE PREGUNTAS (ejemplo, podés sumar más)
  *******************************************************/
 const QUESTIONS = [
   {
@@ -216,7 +227,7 @@ function saveScores(a){ localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); }
 function addScoreLocal(e){
   const a=loadScores();
   a.push(e);
-  saveScores(a.slice(-200)); // guardamos hasta 200 últimos
+  saveScores(a.slice(-200));
 }
 function getSortedAllLocal(){ return loadScores().sort((a,b)=> b.points-a.points || a.ts-b.ts); }
 function getTopLocal(n=10){ return getSortedAllLocal().slice(0,n); }
@@ -286,7 +297,7 @@ function mountStart(){
   const last=(localStorage.getItem(STORAGE_PLAYER)||"").trim();
   if($("#player-name")&&last) $("#player-name").value=last;
 
-  // Botón Sonido (si existe en el HTML)
+  // Botón Sonido
   const btnSound = $("#btn-sound");
   if (btnSound){
     const refreshLabel = () => btnSound.textContent = sfx.enabled ? "🔈 Sonido: ON" : "🔇 Sonido: OFF";
@@ -295,7 +306,6 @@ function mountStart(){
     btnSound.addEventListener("click", e=>{
       e.stopPropagation();
 
-      // toggle
       sfx.enabled = !sfx.enabled;
       refreshLabel();
 
@@ -308,19 +318,26 @@ function mountStart(){
       if (!sfx.unlocked){
         sfx.unlocked = true;
         Object.values(sfx.clips).forEach(a=>{
-          try {
-            a.play().then(()=>a.pause()).catch(()=>{});
-          } catch(e){}
+          try { a.play().then(()=>a.pause()).catch(()=>{}); } catch(e){}
         });
       }
 
-      // Reproducir según pantalla actual
       const current = getCurrentScreenId();
       sfxStopAll();
       if      (current === "#screen-start")  sfxPlay("inicio");
       else if (current === "#screen-lobby")  sfxPlay("lobby");
       else if (current === "#screen-game")   sfxPlay("game");
       else if (current === "#screen-end")    sfxPlay("end");
+    });
+  }
+
+  // Slider de volumen
+  const volSlider = $("#volume-slider");
+  if (volSlider){
+    volSlider.value = sfx.master * 100;
+    volSlider.addEventListener("input", ()=>{
+      sfx.master = Number(volSlider.value) / 100;
+      applyVolumes();
     });
   }
 
@@ -332,8 +349,6 @@ function mountStart(){
     $("#solo-controls").classList.remove("hidden");
     $("#multi-controls").classList.add("hidden");
     lockConfig(false);
-
-    // cambiar a música de inicio si sonido está activo
     show("#screen-start");
   });
   $("#mode-multi")?.addEventListener("click",()=>{
@@ -343,7 +358,6 @@ function mountStart(){
     $("#solo-controls").classList.add("hidden");
     $("#multi-controls").classList.remove("hidden");
     lockConfig(false);
-
     show("#screen-start");
   });
 
@@ -393,7 +407,7 @@ function mountStart(){
   $("#btn-lobby-start")?.addEventListener("click", hostStartMatch);
   $("#btn-lobby-leave")?.addEventListener("click", leaveRoom);
 
-  // Botón “Nueva partida” de la pantalla final
+  // Botón “Nueva partida”
   $("#restart")?.addEventListener("click", ()=>{
     if (state.roomCode) leaveRoom();
     else show("#screen-start");
@@ -424,7 +438,6 @@ function goToGameAndStart(){
   renderQuestion(); setLivesUI(); setKpis(); setProgress();
   $("#power-5050").disabled=false; $("#power-skip").disabled=false; $("#explain").textContent="";
   startTimer();
-
   sfxStopAll();
   sfxPlay("game");
 }
@@ -778,11 +791,10 @@ function endGame(){
     ts:Date.now()
   };
 
-  // local + nube
   addScoreLocal(entry);
   addScoreCloud(entry);
 
-  const allSorted=getSortedAllLocal(); // para posición aproximada local
+  const allSorted=getSortedAllLocal();
   const pos=allSorted.findIndex(e=>e.ts===entry.ts)+1; state.finalPosition=pos||null;
 
   show("#screen-end");
@@ -800,7 +812,7 @@ function endGame(){
 }
 
 /*******************************************************
- *  Ranking + compartir (Firebase + local fallback)
+ *  Ranking + compartir
  *******************************************************/
 function renderLeaderboardLocal(){
   const tbody=$("#lb-body"); if(!tbody) return;
@@ -874,8 +886,6 @@ function checkRoomParamOnLoad(){
     $("#join-panel")?.classList.remove("hidden");
     const input = $("#join-code");
     if(input) input.value = code;
-    // Si querés auto-entrar sin tocar nada, podés descomentar:
-    // setTimeout(()=> joinRoomFlow(), 500);
   }
 }
 
@@ -884,6 +894,6 @@ function checkRoomParamOnLoad(){
  *******************************************************/
 function init(){
   mountStart();
-  show("#screen-start");     // pantalla inicial (sin audio hasta tocar el botón)
+  show("#screen-start");
 }
 init();
