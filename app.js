@@ -897,4 +897,3 @@ function init(){
   show("#screen-start");
 }
 init();
-
