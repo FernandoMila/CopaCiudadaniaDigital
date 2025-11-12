@@ -12,31 +12,77 @@
  ***********************/
 const FIREBASE_ENABLED = true;
 
-/*******************************************************
- *  CONFIG: Firebase + utilidades
- *******************************************************/
 const firebaseConfig = {
   apiKey: "AIzaSyBUJLB57u7uw48G9LyRplDO-x8tQ8gVEGM",
   authDomain: "copa-387c8.firebaseapp.com",
-  databaseURL: "https://copa-387c8-default-rtdb.firebaseio.com", // 👈 CLAVE
+  databaseURL: "https://copa-387c8-default-rtdb.firebaseio.com/",
   projectId: "copa-387c8",
-  storageBucket: "copa-387c8.firebasestorage.app",
+  storageBucket: "copa-387c8.appspot.com",
   messagingSenderId: "203974305127",
-  appId: "1:203974305127:web:300a3d44c120f759d5bbc2"
+  appId: "1:203974305127:web:300a3d44c120f759d5bbc2",
+  measurementId: "G-J7W12H9DMC"
 };
 
-// La página carga firebase-app-compat y firebase-database-compat en index.html
-let db = null;
-try {
-  const appFB = firebase.initializeApp(firebaseConfig);
-  db = firebase.database();
-  console.log("[FB] Inicializado OK");
-} catch (e) {
-  console.warn("[FB] No se pudo inicializar Firebase (continuo con local):", e);
+let fbApp = null, fbDb = null;
+if (FIREBASE_ENABLED && window.firebase) {
+  fbApp = firebase.initializeApp(firebaseConfig);
+  fbDb  = firebase.database();
+  console.log("✅ Firebase conectado");
+} else {
+  console.warn("⚠️ Firebase no disponible, solo funcionará el modo local.");
 }
 
 /*******************************************************
- *  BANCO DE PREGUNTAS (tu set actual + puedes sumar más)
+ *  SONIDOS
+ *******************************************************/
+const sfx = {
+  enabled: true,
+  unlocked: false,   // se desbloquea la 1ª vez que tocan el botón
+  master: 0.8,       // volumen general (0 a 1)
+  clips: {
+    inicio: new Audio('sonidos/inicio.mp3'),
+    lobby:  new Audio('sonidos/espera.mp3'),
+    game:   new Audio('sonidos/juego.mp3'),
+    end:    new Audio('sonidos/fin2.mp3')
+  }
+};
+
+// Volumen base por tipo de música
+const BASE_VOL = {
+  inicio: 0.8,
+  lobby:  0.8,
+  game:   0.7,
+  end:    1.0
+};
+
+function applyVolumes(){
+  Object.entries(sfx.clips).forEach(([key, audio])=>{
+    const base = BASE_VOL[key] ?? 0.5;
+    audio.volume = base * sfx.master;
+  });
+}
+applyVolumes();
+
+sfx.clips.inicio.loop = true;
+sfx.clips.lobby.loop  = true;
+sfx.clips.game.loop   = true;
+sfx.clips.end.loop    = false;
+
+function sfxStopAll(){
+  Object.values(sfx.clips).forEach(a=>{
+    try { a.pause(); a.currentTime = 0; } catch(e){}
+  });
+}
+
+function sfxPlay(name){
+  if (!sfx.enabled || !sfx.unlocked) return;
+  const a = sfx.clips[name];
+  if(!a) return;
+  a.play().catch(()=>{});
+}
+
+/*******************************************************
+ *  BANCO DE PREGUNTAS (ejemplo, podés sumar más)
  *******************************************************/
 const QUESTIONS = [
   {
@@ -172,433 +218,682 @@ const QUESTIONS = [
 ];
 
 /*******************************************************
- *  RANKING LOCAL (respaldo) + GLOBAL (Firebase)
+ *  Ranking (LocalStorage + Firebase)
  *******************************************************/
-const STORAGE_KEY = "cd_scores_v1";
+const STORAGE_KEY="cd_scores_v1", STORAGE_PLAYER="cd_last_player";
 
-function loadScoresLocal() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY) || "[]";
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
+function loadScores(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")||[]}catch{return[]} }
+function saveScores(a){ localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); }
+function addScoreLocal(e){
+  const a=loadScores();
+  a.push(e);
+  saveScores(a.slice(-200));
 }
-function saveScoresLocal(arr) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-}
-function addScoreLocal(entry) {
-  const arr = loadScoresLocal();
-  arr.push(entry);
-  saveScoresLocal(arr);
-}
-function getTopLocal(n=10) {
-  return loadScoresLocal().sort((a,b)=> b.points - a.points).slice(0,n);
-}
-function clearScoresLocal() {
-  localStorage.removeItem(STORAGE_KEY);
-}
+function getSortedAllLocal(){ return loadScores().sort((a,b)=> b.points-a.points || a.ts-b.ts); }
+function getTopLocal(n=10){ return getSortedAllLocal().slice(0,n); }
+function clearScoresLocal(){ localStorage.removeItem(STORAGE_KEY); }
 
-// GLOBAL Firebase: write/read
-async function addScoreGlobal(entry) {
-  if (!db) throw new Error("Firebase DB no disponible");
-  await db.ref("scores").push(entry); // crea /scores si no existe
-}
-
-async function getTopGlobal(n=10) {
-  if (!db) throw new Error("Firebase DB no disponible");
-  // Traigo por points (limitToLast) y ordeno descendente en cliente
-  const snap = await db.ref("scores").orderByChild("points").limitToLast(n).once("value");
-  const arr = [];
-  snap.forEach(child => {
-    const v = child.val();
-    if (v && typeof v.points === "number") arr.push(v);
-  });
-  return arr.sort((a,b) => b.points - a.points).slice(0, n);
+function addScoreCloud(entry){
+  if(!FIREBASE_ENABLED || !fbDb) return;
+  fbDb.ref("/scores").push(entry).catch(err=>console.warn("No se pudo guardar en Firebase",err));
 }
 
 /*******************************************************
- *  ESTADO + HELPERS UI
+ *  Estado + helpers
  *******************************************************/
-const CATEGORIES = [...new Set(QUESTIONS.map(q=>q.category))];
-
-const state = {
-  difficulty: "Normal",
-  selectedCats: new Set(CATEGORIES),
-  pool: [],
-  idx: 0,
-  points: 0,
-  lives: 3,
-  time: 60,
-  timerId: null,
-  used5050: false,
-  usedSkip: false,
-  medals: { seguridad:0, empatia:0, critico:0, bienestar:0 },
-  player: "Anónimo",
-  finalScore: 0,
-  // audio
-  currentTrack: null
+const CATEGORIES=[...new Set(QUESTIONS.map(q=>q.category))];
+const state={
+  mode:"solo", host:false, roomCode:null, roomName:null, peers:new Map(),
+  difficulty:"Normal", selectedCats:new Set(CATEGORIES),
+  pool:[], idx:0, points:0, lives:3, time:60, timerId:null,
+  used5050:false, usedSkip:false,
+  medals:{seguridad:0, empatia:0, critico:0, bienestar:0},
+  player:"Anónimo", finalScore:0, finalPosition:null
 };
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
 
-const $  = sel => document.querySelector(sel);
-const $$ = sel => Array.from(document.querySelectorAll(sel));
+function setProgress(){ const pct=state.pool.length?(state.idx/state.pool.length)*100:0; $("#progress").style.width=pct+"%"; }
+function setLivesUI(){ $("#lives").textContent="❤️".repeat(state.lives)+"🖤".repeat(Math.max(0,3-state.lives)); }
+function setKpis(){ $("#points").textContent=state.points; $("#round").textContent=state.idx+1; $("#time").textContent=state.time+"s"; $("#ui-player").textContent=state.player; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+function diffMult(){ return state.difficulty==="Hard"?1.3:state.difficulty==="Easy"?0.8:1.0; }
+function formatDate(ts){ return new Date(ts).toLocaleString([], {hour12:false}); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]||c)); }
 
+function getCurrentScreenId(){
+  const ids = ["#screen-start","#screen-lobby","#screen-game","#screen-end","#screen-leaderboard"];
+  for (const id of ids){
+    const el = document.querySelector(id);
+    if (el && !el.classList.contains("hidden")) return id;
+  }
+  return "#screen-start";
+}
+
+/* Mostrar pantalla + audio contextual */
 function show(id){
-  ["#screen-start","#screen-game","#screen-end","#screen-leaderboard","#screen-lobby"]
-    .forEach(s=>$(s).classList.add("hidden"));
-  $(id).classList.remove("hidden");
-}
-function setProgress(){ const pct = (state.idx / state.pool.length) * 100; $("#progress").style.width = pct + "%"; }
-function setLivesUI(){
-  const hearts = "❤️".repeat(state.lives) + "🖤".repeat(Math.max(0,3-state.lives));
-  $("#lives").textContent = hearts;
-}
-function setKpis(){
-  $("#points").textContent = state.points;
-  $("#round").textContent  = state.idx+1;
-  $("#time").textContent   = state.time + "s";
-  $("#ui-player").textContent = state.player;
-}
-function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
-function diffMult(){
-  return state.difficulty==="Hard" ? 1.3 : state.difficulty==="Easy" ? 0.8 : 1.0;
-}
-function formatDate(ts){
-  try {
-    const d = new Date(ts);
-    return d.toLocaleString([], { hour12:false });
-  } catch { return ""; }
+  ["#screen-start","#screen-lobby","#screen-game","#screen-end","#screen-leaderboard"]
+    .forEach(s=>$(s)?.classList.add("hidden"));
+  $(id)?.classList.remove("hidden");
+
+  sfxStopAll();
+  if (!sfx.enabled || !sfx.unlocked) return;
+
+  if (id === "#screen-start")      sfxPlay("inicio");
+  else if (id === "#screen-lobby") sfxPlay("lobby");
+  else if (id === "#screen-game")  sfxPlay("game");
+  else if (id === "#screen-end")   sfxPlay("end");
 }
 
-function escapeHtml(str){
-  return String(str).replace(/[&<>"']/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[s]));
+/* 🔒 Lock config (dif + categorías) cuando sos invitado */
+function lockConfig(lock){
+  $$("#screen-start [data-diff]").forEach(b=>{ b.disabled = !!lock; b.classList.toggle("disabled", !!lock); });
+  $$("#cats .pill").forEach(b=>{ b.disabled = !!lock; b.classList.toggle("disabled", !!lock); });
 }
 
 /*******************************************************
- *  AUDIO (volumen + crossfade simple)
- *******************************************************/
-const audioEl = new Audio();
-audioEl.loop = true;
-audioEl.volume = 0.7; // puedes ajustar
-
-function playMusic(src){
-  try {
-    if (!src) return;
-    if (audioEl.src.endsWith(src)) { audioEl.play().catch(()=>{}); return; }
-    audioEl.pause();
-    audioEl.src = src;
-    audioEl.currentTime = 0;
-    audioEl.play().catch(()=>{ /* navegador puede bloquear hasta interacción */ });
-  } catch(e){ console.warn("Audio error:", e); }
-}
-function stopMusic(){
-  try { audioEl.pause(); } catch {}
-}
-
-/*******************************************************
- *  INICIO
+ *  Inicio (montaje UI)
  *******************************************************/
 function mountStart(){
+  const last=(localStorage.getItem(STORAGE_PLAYER)||"").trim();
+  if($("#player-name")&&last) $("#player-name").value=last;
+
+  // Botón Sonido
+  const btnSound = $("#btn-sound");
+  if (btnSound){
+    const refreshLabel = () => btnSound.textContent = sfx.enabled ? "🔈 Sonido: ON" : "🔇 Sonido: OFF";
+    refreshLabel();
+
+    btnSound.addEventListener("click", e=>{
+      e.stopPropagation();
+
+      sfx.enabled = !sfx.enabled;
+      refreshLabel();
+
+      if (!sfx.enabled){
+        sfxStopAll();
+        return;
+      }
+
+      // Primera vez que se enciende: desbloquear audio
+      if (!sfx.unlocked){
+        sfx.unlocked = true;
+        Object.values(sfx.clips).forEach(a=>{
+          try { a.play().then(()=>a.pause()).catch(()=>{}); } catch(e){}
+        });
+      }
+
+      const current = getCurrentScreenId();
+      sfxStopAll();
+      if      (current === "#screen-start")  sfxPlay("inicio");
+      else if (current === "#screen-lobby")  sfxPlay("lobby");
+      else if (current === "#screen-game")   sfxPlay("game");
+      else if (current === "#screen-end")    sfxPlay("end");
+    });
+  }
+
+  // Slider de volumen
+  const volSlider = $("#volume-slider");
+  if (volSlider){
+    volSlider.value = sfx.master * 100;
+    volSlider.addEventListener("input", ()=>{
+      sfx.master = Number(volSlider.value) / 100;
+      applyVolumes();
+    });
+  }
+
+  // Modo
+  $("#mode-solo")?.addEventListener("click",()=>{
+    state.mode="solo"; state.host=false;
+    $("#mode-solo").classList.add("primary");
+    $("#mode-multi").classList.remove("primary");
+    $("#solo-controls").classList.remove("hidden");
+    $("#multi-controls").classList.add("hidden");
+    lockConfig(false);
+    show("#screen-start");
+  });
+  $("#mode-multi")?.addEventListener("click",()=>{
+    state.mode="host"; state.host=true;
+    $("#mode-multi").classList.add("primary");
+    $("#mode-solo").classList.remove("primary");
+    $("#solo-controls").classList.add("hidden");
+    $("#multi-controls").classList.remove("hidden");
+    lockConfig(false);
+    show("#screen-start");
+  });
+
   // Dificultad
   $$("#screen-start [data-diff]").forEach(b=>{
     b.addEventListener("click",()=>{
-      state.difficulty = b.dataset.diff;
+      if (b.disabled) return;
+      state.difficulty=b.dataset.diff;
       $$("#screen-start [data-diff]").forEach(x=>x.classList.remove("primary"));
       b.classList.add("primary");
     });
   });
 
   // Categorías
-  const cats = $("#cats");
-  cats.innerHTML = "";
+  const cats=$("#cats"); cats.innerHTML="";
   CATEGORIES.forEach(cat=>{
-    const btn = document.createElement("button");
-    btn.className = "pill";
-    btn.textContent = cat;
-    btn.ariaPressed = "true";
+    const btn=document.createElement("button");
+    btn.className="pill"; btn.textContent=cat; btn.ariaPressed="true";
     btn.addEventListener("click",()=>{
+      if(btn.disabled) return;
       if(state.selectedCats.has(cat)){ state.selectedCats.delete(cat); btn.ariaPressed="false"; btn.classList.add("ghost"); }
       else { state.selectedCats.add(cat); btn.ariaPressed="true"; btn.classList.remove("ghost"); }
     });
     cats.appendChild(btn);
   });
 
-  // Ranking desde inicio
+  // Ranking
   $("#btn-start-lb-full")?.addEventListener("click", ()=>{ renderLeaderboard(); show("#screen-leaderboard"); });
-
-  // Botón borrar histórico (pantalla ranking)
-  $("#btn-clear")?.addEventListener("click", ()=>{
-    if(confirm("¿Borrar ranking local en este dispositivo?")){ clearScoresLocal(); renderLeaderboard(); }
-  });
-
-  // Volver
   $("#btn-back-home")?.addEventListener("click", ()=> show("#screen-start"));
-
-  // Empezar 1 jugador
-  $("#btn-start")?.addEventListener("click", startGame);
-
-  // Fin
-  $("#restart")?.addEventListener("click", ()=>{ stopMusic(); playMusic("sonidos/inicio.mp3"); show("#screen-start"); });
+  $("#btn-clear")?.addEventListener("click", ()=>{
+    if(confirm("¿Seguro que querés borrar el histórico local?")){
+      clearScoresLocal(); renderLeaderboard();
+    }
+  });
   $("#see-leaderboard")?.addEventListener("click", ()=>{ renderLeaderboard(); show("#screen-leaderboard"); });
   $("#share")?.addEventListener("click", shareScore);
 
-  // Poderes
-  $("#power-5050")?.addEventListener("click", power5050);
-  $("#power-skip")?.addEventListener("click", powerSkip);
+  // 1 jugador
+  $("#btn-start")?.addEventListener("click", startGameSolo);
 
-  // Siguiente
-  $("#next")?.addEventListener("click", nextQuestion);
+  // Multijugador
+  $("#btn-create-room")?.addEventListener("click", createRoomFlow);
+  $("#btn-join-room")?.addEventListener("click", ()=> $("#join-panel").classList.toggle("hidden"));
+  $("#btn-join-confirm")?.addEventListener("click", joinRoomFlow);
 
-  // Música de inicio (al primer click en la página para evitar bloqueo)
-  document.body.addEventListener("click", function once(){
-    playMusic("sonidos/inicio.mp3");
-    document.body.removeEventListener("click", once);
-  }, { once:true });
+  // Lobby
+  $("#btn-lobby-start")?.addEventListener("click", hostStartMatch);
+  $("#btn-lobby-leave")?.addEventListener("click", leaveRoom);
+
+  // Botón “Nueva partida”
+  $("#restart")?.addEventListener("click", ()=>{
+    if (state.roomCode) leaveRoom();
+    else show("#screen-start");
+  });
+
+  // Auto-join por URL ?room=XXXX
+  checkRoomParamOnLoad();
 }
 
-function startGame(){
-  const nameInput = $("#player-name");
-  const name = (nameInput?.value || "").trim();
-  state.player = name || "Anónimo";
+function captureName(){
+  const name=($("#player-name")?.value||"").trim();
+  state.player=name||"Anónimo";
+  try{localStorage.setItem(STORAGE_PLAYER,state.player)}catch{}
+}
 
-  state.points = 0; state.lives = 3; state.used5050 = false; state.usedSkip = false;
-  state.medals = { seguridad:0, empatia:0, critico:0, bienestar:0 };
-
-  state.pool = QUESTIONS.filter(q=>state.selectedCats.has(q.category));
-  if(state.pool.length===0) state.pool = QUESTIONS.slice();
+function setupMatchPoolFromUI(){
+  state.points=0; state.lives=3; state.used5050=false; state.usedSkip=false;
+  state.medals={seguridad:0, empatia:0, critico:0, bienestar:0};
+  state.pool=QUESTIONS.filter(q=>state.selectedCats.has(q.category));
+  if(!state.pool.length) state.pool=QUESTIONS.slice();
   shuffle(state.pool);
+  state.time=state.difficulty==="Easy"?75:state.difficulty==="Hard"?45:60;
+  state.idx=0;
+}
 
-  state.time = state.difficulty==="Easy" ? 75 : state.difficulty==="Hard" ? 45 : 60;
-
-  state.idx = 0;
+function goToGameAndStart(){
   show("#screen-game");
-  stopMusic();
-  playMusic("sonidos/juego.mp3");
-
-  renderQuestion();
-  setLivesUI();
-  setKpis();
-  setProgress();
-  $("#explain").textContent = "";
-  $("#power-5050").disabled = false;
-  $("#power-skip").disabled = false;
+  renderQuestion(); setLivesUI(); setKpis(); setProgress();
+  $("#power-5050").disabled=false; $("#power-skip").disabled=false; $("#explain").textContent="";
   startTimer();
+  sfxStopAll();
+  sfxPlay("game");
+}
+
+/*******************************************************
+ *  Firebase: paths, canal y mensajes
+ *******************************************************/
+let fbEventsRef=null, fbEventsListener=null;
+let fbRosterRef=null, fbRosterListener=null;
+
+function firebaseRoomPath(code){ return `/rooms/${code}`; }
+function firebaseEventsPath(code){ return `/rooms/${code}/events`; }
+function firebaseRosterPath(code){ return `/rooms/${code}/roster`; }
+
+function openChannel(code){
+  if(!fbDb) return;
+  closeChannel();
+
+  fbEventsRef = fbDb.ref(firebaseEventsPath(code));
+  fbEventsListener = fbEventsRef.limitToLast(1).on('child_added', snap=>{
+    const msg = snap.val();
+    if (msg) handleRoomMessage(msg);
+  });
+
+  fbRosterRef = fbDb.ref(firebaseRosterPath(code));
+  fbRosterListener = fbRosterRef.on("value", snap=>{
+    const data = snap.val() || {};
+    state.peers = new Map(
+      Object.entries(data).map(([peerId,info])=>[peerId,{name:info.name}])
+    );
+    renderLobbyPlayers();
+  });
+}
+
+function closeChannel(){
+  if(fbEventsRef && fbEventsListener){ fbEventsRef.off('child_added', fbEventsListener); }
+  if(fbRosterRef && fbRosterListener){ fbRosterRef.off('value', fbRosterListener); }
+  fbEventsRef=fbEventsListener=fbRosterRef=fbRosterListener=null;
+}
+
+function sendRoom(type, payload={}){
+  if(!state.roomCode || !fbDb) return;
+  const msg={type, payload, from: state.player, ts: Date.now()};
+  fbDb.ref(firebaseEventsPath(state.roomCode)).push(msg);
+}
+
+/*******************************************************
+ *  Flujos Multijugador
+ *******************************************************/
+function genCode4(){ return String(Math.floor(1000+Math.random()*9000)); }
+
+function updateLobbyList(name, peerId){
+  if(!peerId) peerId = `${name}-${Math.random().toString(36).slice(2,7)}`;
+  state.peers.set(peerId, {name});
+  if(state.roomCode && fbDb){
+    fbDb.ref(firebaseRosterPath(state.roomCode)+"/"+peerId).set({name});
+  }
+  renderLobbyPlayers();
+}
+
+function renderLobbyPlayers(){
+  const ul=$("#lobby-players"); if(!ul) return;
+  ul.innerHTML="";
+  if(state.host){
+    const liHost=document.createElement("li");
+    liHost.textContent=`👑 ${state.player} (host)`;
+    ul.appendChild(liHost);
+  }
+  [...state.peers.values()].forEach(p=>{
+    const li=document.createElement("li");
+    li.textContent=`👤 ${p.name}`;
+    ul.appendChild(li);
+  });
+}
+
+function updateShareArtifacts(){
+  if(!state.roomCode) return;
+  const shareUrl = `${location.origin}${location.pathname}?room=${state.roomCode}`;
+  const linkEl = $("#lobby-room-link");
+  if(linkEl) linkEl.textContent = shareUrl;
+
+  const btnCopy = $("#btn-copy-link");
+  if(btnCopy){
+    btnCopy.onclick = () => {
+      if(navigator.clipboard?.writeText){
+        navigator.clipboard.writeText(shareUrl)
+          .then(()=> alert("Enlace copiado 📋"))
+          .catch(()=> window.prompt("Copiá el enlace:", shareUrl));
+      } else {
+        window.prompt("Copiá el enlace:", shareUrl);
+      }
+    };
+  }
+
+  if (window.QRCode) {
+    const qrEl = $("#qr");
+    if(qrEl){
+      qrEl.innerHTML = "";
+      new QRCode(qrEl, { text: shareUrl, width: 128, height: 128, correctLevel: QRCode.CorrectLevel.M });
+    }
+  }
+}
+
+function createRoomFlow(){
+  if(!fbDb){ alert("Firebase no está disponible. Solo podés usar 1 jugador."); return; }
+
+  captureName();
+  state.mode="host"; state.host=true;
+  const inputRoomName = ($("#room-name")?.value || "").trim();
+  state.roomCode=genCode4();
+  state.roomName = inputRoomName || `Sala ${state.roomCode}`;
+
+  fbDb.ref(firebaseRoomPath(state.roomCode)).set({
+    createdAt: Date.now(),
+    host: state.player,
+    roomName: state.roomName
+  });
+
+  openChannel(state.roomCode);
+
+  state.peers = new Map();
+  updateLobbyList(state.player, `host-${Math.random().toString(36).slice(2,7)}`);
+
+  $("#lobby-room-name").textContent=state.roomName;
+  $("#lobby-room-code").textContent=state.roomCode;
+  renderLobbyPlayers();
+  show("#screen-lobby");
+
+  updateShareArtifacts();
+
+  const shareUrl = `${location.origin}${location.pathname}?room=${state.roomCode}`;
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(shareUrl).catch(()=>{});
+
+  sfxStopAll();
+  sfxPlay("lobby");
+}
+
+function joinRoomFlow(){
+  if(!fbDb){ alert("Firebase no está disponible. Solo podés usar 1 jugador."); return; }
+
+  captureName();
+  const code=($("#join-code")?.value||"").trim();
+  if(!/^\d{4}$/.test(code)){ alert("Ingresá un código de 4 dígitos válido."); return; }
+
+  state.mode="guest"; state.host=false; state.roomCode=code; state.roomName=`Sala ${code}`;
+
+  // 🔒 Invitados: bloquear dificultad/categorías
+  lockConfig(true);
+
+  openChannel(code);
+
+  const peerId=`${state.player}-${Math.random().toString(36).slice(2,7)}`;
+  sendRoom("hello", { playerName: state.player, peerId });
+  sendRoom("join",  { playerName: state.player, peerId });
+
+  $("#lobby-room-name").textContent=state.roomName;
+  $("#lobby-room-code").textContent=state.roomCode;
+  renderLobbyPlayers();
+  show("#screen-lobby");
+  updateShareArtifacts();
+
+  sfxStopAll();
+  sfxPlay("lobby");
+}
+
+function hostStartMatch(){
+  if(!state.host) return;
+
+  const poolIdxs=(QUESTIONS.map((q,i)=>({q,i})).filter(x=>state.selectedCats.has(x.q.category)).map(x=>x.i));
+  const finalIdxs = (poolIdxs.length?poolIdxs:QUESTIONS.map((_,i)=>i));
+  shuffle(finalIdxs);
+
+  const time = state.difficulty==="Easy"?75:state.difficulty==="Hard"?45:60;
+  const payload={ roomCode:state.roomCode, difficulty:state.difficulty, selectedCats:[...state.selectedCats], poolIdxs:finalIdxs, time };
+  applyStartPayload(payload);
+  sendRoom("start", payload);
+  goToGameAndStart();
+}
+
+function applyStartPayload(p){
+  state.difficulty=p.difficulty;
+  state.selectedCats=new Set(p.selectedCats);
+
+  if (!state.host) lockConfig(true);
+
+  state.pool=(p.poolIdxs||[]).map(i=>QUESTIONS[i]);
+  if(!state.pool.length){ state.pool=QUESTIONS.slice(); shuffle(state.pool); }
+  state.time=p.time ?? (state.difficulty==="Easy"?75:state.difficulty==="Hard"?45:60);
+  state.points=0; state.lives=3; state.used5050=false; state.usedSkip=false;
+  state.medals={seguridad:0, empatia:0, critico:0, bienestar:0}; state.idx=0;
+}
+
+function leaveRoom(){
+  if(state.roomCode && fbDb){
+    const peerId=`${state.player}-leave`;
+    sendRoom("leave",{peerId});
+    fbDb.ref(firebaseRosterPath(state.roomCode)).once("value").then(snap=>{
+      const roster=snap.val()||{};
+      Object.keys(roster).forEach(pid=>{
+        if(roster[pid]?.name===state.player){
+          fbDb.ref(firebaseRosterPath(state.roomCode)+"/"+pid).remove();
+        }
+      });
+    }).finally(()=> closeChannel());
+  }
+  state.roomCode=null; state.roomName=null; state.host=false; state.mode="solo"; state.peers.clear();
+  lockConfig(false);
+  show("#screen-start");
+
+  sfxStopAll();
+  sfxPlay("inicio");
+}
+
+/*******************************************************
+ *  Mensajes de sala
+ *******************************************************/
+function handleRoomMessage({type, payload}={}){
+  if(!type) return;
+
+  if(type==="hello" && state.host){
+    updateLobbyList(payload.playerName, payload.peerId);
+    const players=[...state.peers.entries()].map(([peerId,info])=>({peerId,name:info.name}));
+    sendRoom("roster", { players });
+  }
+
+  if(type==="roster" && !state.host){
+    state.peers.clear();
+    payload.players?.forEach(p=> state.peers.set(p.peerId, {name:p.name}));
+    renderLobbyPlayers();
+  }
+
+  if(type==="join" && state.host){
+    updateLobbyList(payload.playerName, payload.peerId);
+  }
+
+  if(type==="leave"){
+    state.peers.delete(payload.peerId);
+    renderLobbyPlayers();
+  }
+
+  if(type==="start"){
+    applyStartPayload(payload);
+    goToGameAndStart();
+  }
+}
+
+/*******************************************************
+ *  Juego
+ *******************************************************/
+function startGameSolo(){
+  captureName();
+  setupMatchPoolFromUI();
+  goToGameAndStart();
 }
 
 function startTimer(){
   clearInterval(state.timerId);
-  state.timerId = setInterval(()=>{
+  state.timerId=setInterval(()=>{
     state.time--;
-    $("#time").textContent = state.time + "s";
+    $("#time").textContent=state.time+"s";
     if(state.time<=0){
       clearInterval(state.timerId);
-      state.lives = 0;
-      setLivesUI();
-      endGame();
+      state.lives=0; setLivesUI(); endGame();
     }
-  }, 1000);
+  },1000);
 }
 
 function renderQuestion(){
-  const q = state.pool[state.idx];
-  $("#qcat").textContent = q.category;
-  $("#qtext").textContent = q.text;
-  $("#explain").textContent = "";
+  const q=state.pool[state.idx];
+  $("#qcat").textContent=q.category;
+  $("#qtext").textContent=q.text;
+  $("#explain").textContent="";
   $("#next").classList.add("hidden");
-  const wrap = $("#answers");
-  wrap.innerHTML = "";
-  const opts = q.options.map((text,i)=>({text, i}));
-  shuffle(opts).forEach(({text,i})=>{
-    const btn = document.createElement("button");
-    btn.className = "option";
-    btn.textContent = text;
-    btn.addEventListener("click",()=>selectAnswer(i, btn));
-    wrap.appendChild(btn);
+
+  const wrap=$("#answers"); wrap.innerHTML="";
+  const opts=q.options.map((t,i)=>({t,i}));
+  shuffle(opts).forEach(({t,i})=>{
+    const b=document.createElement("button");
+    b.className="option"; b.textContent=t;
+    b.addEventListener("click",()=>selectAnswer(i,b));
+    wrap.appendChild(b);
   });
 }
 
-function selectAnswer(chosenIndex, btnEl){
+function selectAnswer(chosenIndex,btn){
   $$("#answers .option").forEach(b=>b.disabled=true);
+  const q=state.pool[state.idx];
+  const correct=(chosenIndex===q.answer);
 
-  const q = state.pool[state.idx];
-  const correct = (chosenIndex === q.answer);
   if(correct){
-    btnEl.classList.add("correct");
-    const base = state.difficulty==="Hard" ? 150 : state.difficulty==="Easy" ? 80 : 100;
-    state.points += base;
-    q.tags?.forEach(tag=>{
-      if(tag==="seguridad") state.medals.seguridad++;
-      if(tag==="empatia")  state.medals.empatia++;
-      if(tag==="critico")  state.medals.critico++;
+    btn.classList.add("correct");
+    const base=state.difficulty==="Hard"?150:state.difficulty==="Easy"?80:100;
+    state.points+=base;
+    q.tags.forEach(tag=>{
+      if(tag==="seguridad")state.medals.seguridad++;
+      if(tag==="empatia")state.medals.empatia++;
+      if(tag==="critico")state.medals.critico++;
       if(tag==="bienestar")state.medals.bienestar++;
     });
-    $("#explain").textContent = "✔️ Correcto. " + q.explain;
+    $("#explain").textContent="✔️ Correcto. "+q.explain;
   }else{
-    btnEl.classList.add("wrong");
-    const correctText = q.options[q.answer];
-    $$("#answers .option").forEach(b=>{
-      if(b.textContent===correctText) b.classList.add("correct");
-    });
-    const penalty = state.difficulty==="Hard" ? 2 : 1;
-    state.lives = Math.max(0, state.lives - penalty);
+    btn.classList.add("wrong");
+    const ct=q.options[q.answer];
+    $$("#answers .option").forEach(b=>{ if(b.textContent===ct) b.classList.add("correct"); });
+    const penalty=state.difficulty==="Hard"?2:1;
+    state.lives=Math.max(0, state.lives-penalty);
     setLivesUI();
-    $("#explain").textContent = "❌ Incorrecto. " + q.explain;
+    $("#explain").textContent="❌ Incorrecto. "+q.explain;
   }
-  $("#points").textContent = state.points;
+
+  $("#points").textContent=state.points;
   $("#next").classList.remove("hidden");
   $("#next").focus();
 }
 
-function power5050(){
+// Poderes
+$("#power-5050")?.addEventListener("click",()=>{
   if(state.used5050) return;
-  const q = state.pool[state.idx];
-  const buttons = $$("#answers .option").filter(b=>!b.disabled);
-  const incorrect = buttons.filter(b=> b.textContent !== q.options[q.answer]);
-  shuffle(incorrect).slice(0, Math.max(1, incorrect.length-1)).forEach(b=>{ b.classList.add("hidden"); b.disabled=true; });
-  state.used5050 = true;
-  $("#power-5050").disabled = true;
-}
+  const q=state.pool[state.idx];
+  const buttons=$$("#answers .option").filter(b=>!b.disabled && !b.classList.contains("hidden"));
+  const correctText=q.options[q.answer];
+  const incorrect=buttons.filter(b=>b.textContent!==correctText);
+  const toHide=Math.max(0, incorrect.length-1);
+  shuffle(incorrect).slice(0,toHide).forEach(b=>{ b.classList.add("hidden"); b.disabled=true; });
+  state.used5050=true; $("#power-5050").disabled=true;
+});
 
-function powerSkip(){
+$("#power-skip")?.addEventListener("click",()=>{
   if(state.usedSkip) return;
-  state.usedSkip = true;
-  $("#power-skip").disabled = true;
-  state.points += 20; // pequeña recompensa por prudencia
-  nextQuestion();
-}
+  state.usedSkip=true; $("#power-skip").disabled=true; state.points+=20;
+  if(state.idx>=state.pool.length-1){ endGame(); } else { nextQuestion(); }
+});
 
+$("#next")?.addEventListener("click", nextQuestion);
 function nextQuestion(){
-  state.idx++;
-  setProgress();
-  if(state.lives<=0 || state.idx>=state.pool.length){
-    endGame();
-    return;
-  }
-  renderQuestion();
-  setKpis();
+  state.idx++; setProgress();
+  if(state.lives<=0 || state.idx>=state.pool.length){ endGame(); return; }
+  renderQuestion(); setKpis();
 }
 
-async function endGame(){
+function endGame(){
   clearInterval(state.timerId);
-  stopMusic();
-  playMusic("sonidos/fin2.mp3");
+  const mult=diffMult(), bonusTiempo=Math.max(0,state.time)*2;
+  state.finalScore=Math.round(state.points*mult + bonusTiempo);
 
-  // Puntaje final: base * multiplicador + bonus por tiempo restante
-  const mult = diffMult();
-  const bonusTiempo = Math.max(0, state.time) * 2;
-  state.finalScore = Math.round(state.points * mult + bonusTiempo);
-
-  const entry = {
-    name: state.player,
-    points: state.finalScore,
-    difficulty: (state.difficulty==="Easy"?"Fácil":state.difficulty==="Hard"?"Difícil":"Normal"),
-    ts: Date.now()
+  const entry={
+    name:state.player,
+    points:state.finalScore,
+    difficulty:(state.difficulty==="Easy"?"Fácil":state.difficulty==="Hard"?"Difícil":"Normal"),
+    medals:{...state.medals},
+    ts:Date.now()
   };
 
-  // Guardar local SIEMPRE
   addScoreLocal(entry);
+  addScoreCloud(entry);
 
-  // Intentar guardar global
-  try {
-    await addScoreGlobal(entry);
-  } catch (e) {
-    console.warn("No pude guardar en ranking global, queda local:", e);
-  }
+  const allSorted=getSortedAllLocal();
+  const pos=allSorted.findIndex(e=>e.ts===entry.ts)+1; state.finalPosition=pos||null;
 
-  // Render de resumen
   show("#screen-end");
-  $("#sum-player").textContent = state.player;
-  $("#sum-points").textContent = state.finalScore;
-  $("#sum-rounds").textContent = Math.min(state.idx, state.pool.length);
-  $("#med-sec").textContent  = state.medals.seguridad;
-  $("#med-emp").textContent  = state.medals.empatia;
-  $("#med-crit").textContent = state.medals.critico;
-  $("#med-bien").textContent = state.medals.bienestar;
+  $("#sum-player").textContent=state.player;
+  $("#sum-points").textContent=state.finalScore;
+  $("#sum-rounds").textContent=Math.min(state.idx,state.pool.length);
+  $("#med-sec").textContent=state.medals.seguridad;
+  $("#med-emp").textContent=state.medals.empatia;
+  $("#med-crit").textContent=state.medals.critico;
+  $("#med-bien").textContent=state.medals.bienestar;
+  $("#final-position").textContent=`Posición en ranking: ${state.finalPosition ?? "—"}`;
 
-  // Posición (aprox) usando global primero
-  try {
-    const top = await getTopGlobal(50);
-    const all = top.concat(entry).sort((a,b)=> b.points - a.points);
-    const pos = all.findIndex(e => e === entry || (e.ts === entry.ts && e.name === entry.name)) + 1;
-    $("#final-position").textContent = `Posición en ranking: ${pos || "—"}`;
-  } catch {
-    const all = loadScoresLocal().sort((a,b)=> b.points - a.points);
-    const pos = all.findIndex(e => e === entry) + 1;
-    $("#final-position").textContent = `Posición en ranking: ${pos || "—"}`;
-  }
+  sfxStopAll();
+  sfxPlay("end");
 }
 
 /*******************************************************
- *  RANKING UI
+ *  Ranking + compartir
  *******************************************************/
-async function renderLeaderboard(){
-  const tbody = $("#lb-body");
-  tbody.innerHTML = "";
-
-  // Intento global
-  try {
-    const top = await getTopGlobal(10);
-    if(top.length===0) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="5" class="small">No hay puntajes aún. ¡Jugá una partida!</td>`;
-      tbody.appendChild(tr);
-      return;
-    }
-    top.forEach((e, i)=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${i+1}</td>
-        <td>${escapeHtml(e.name)}</td>
-        <td>${e.points}</td>
-        <td>${escapeHtml(e.difficulty || "")}</td>
-        <td>${formatDate(e.ts)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  } catch (err) {
-    console.warn("Error leyendo ranking global, uso local", err);
-    const top = getTopLocal(10);
-    if(top.length===0){
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="5" class="small">No hay puntajes aún. ¡Jugá una partida!</td>`;
-      tbody.appendChild(tr);
-      return;
-    }
-    top.forEach((e, i)=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${i+1}</td>
-        <td>${escapeHtml(e.name)}</td>
-        <td>${e.points}</td>
-        <td>${escapeHtml(e.difficulty || "")}</td>
-        <td>${formatDate(e.ts)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+function renderLeaderboardLocal(){
+  const tbody=$("#lb-body"); if(!tbody) return;
+  tbody.innerHTML="";
+  const top=getTopLocal(10);
+  if(!top.length){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td colspan="5" class="small">No hay puntajes aún. ¡Jugá una partida!</td>`;
+    tbody.appendChild(tr); return;
   }
+  top.forEach((e,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${i+1}</td><td>${escapeHtml(e.name)}</td><td>${e.points}</td><td>${e.difficulty}</td><td>${formatDate(e.ts)}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
-/*******************************************************
- *  Compartir
- *******************************************************/
+function renderLeaderboard(){
+  const tbody=$("#lb-body"); if(!tbody) return;
+  tbody.innerHTML="";
+
+  if(!FIREBASE_ENABLED || !fbDb){
+    renderLeaderboardLocal();
+    return;
+  }
+
+  fbDb.ref("/scores").orderByChild("points").limitToLast(50).once("value")
+    .then(snap=>{
+      const rows = [];
+      snap.forEach(child=>{
+        const v = child.val();
+        if(v && typeof v.points === "number") rows.push(v);
+      });
+      rows.sort((a,b)=> b.points - a.points || (a.ts||0) - (b.ts||0));
+      const top = rows.slice(0,10);
+
+      if(!top.length){
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td colspan="5" class="small">No hay puntajes aún. ¡Jugá una partida!</td>`;
+        tbody.appendChild(tr); return;
+      }
+      top.forEach((e,i)=>{
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td>${i+1}</td><td>${escapeHtml(e.name)}</td><td>${e.points}</td><td>${e.difficulty||"-"}</td><td>${formatDate(e.ts||Date.now())}</td>`;
+        tbody.appendChild(tr);
+      });
+    })
+    .catch(err=>{
+      console.warn("Error leyendo ranking global, uso local",err);
+      renderLeaderboardLocal();
+    });
+}
+
 function shareScore(){
-  const txt = `🏆 Mi puntaje en la Copa de la Ciudadanía Digital: ${state.finalScore} puntos (Jugador: ${state.player}, ${state.difficulty})`;
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(()=>{
-      alert("¡Puntaje copiado al portapapeles! 📋");
-    }).catch(()=> fallbackShare(txt));
+  const posStr=state.finalPosition?` (Posición: ${state.finalPosition})`:"";
+  const txt=`🏆 Mi puntaje en la Copa de la Ciudadanía Digital: ${state.finalScore} puntos${posStr} — Jugador: ${state.player}, ${state.difficulty}`;
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(txt).then(()=>alert("¡Puntaje copiado! 📋")).catch(()=>fallbackShare(txt));
   } else fallbackShare(txt);
 }
-function fallbackShare(text){
-  window.prompt("Copiá tu puntaje (Ctrl+C):", text);
+function fallbackShare(t){ window.prompt("Copiá tu puntaje (Ctrl+C):", t); }
+
+/*******************************************************
+ *  Auto-join por ?room=XXXX
+ *******************************************************/
+function checkRoomParamOnLoad(){
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("room");
+  if(code && /^\d{4}$/.test(code)){
+    $("#mode-multi")?.click();
+    $("#join-panel")?.classList.remove("hidden");
+    const input = $("#join-code");
+    if(input) input.value = code;
+  }
 }
 
 /*******************************************************
- *  START
+ *  Inicio de la app
  *******************************************************/
-mountStart();
-
-// Si alguien llega directo con ancla #ranking
-if (location.hash === "#ranking") {
-  renderLeaderboard();
-  show("#screen-leaderboard");
+function init(){
+  mountStart();
+  show("#screen-start");
 }
+init();
