@@ -17,13 +17,16 @@
   <div class="app">
     <div class="header">
       <div class="title">🏆 Copa de la <span class="accent">Ciudadanía Digital</span></div>
-      <div class="meta">
+      <div class="meta header-right">
         <!-- Marca institucional -->
         <div class="pill accent-text brand-pill">
           <img src="imagenes/AP.png" alt="AP" class="brand-icon" />
           <span>Aprender Todos</span>
         </div>
-        
+
+        <!-- Botón sonido + volumen -->
+        <button id="btn-sound" class="pill small-pill"></button>
+        <input id="volume-slider" type="range" min="0" max="100" value="80" class="vol-slider" />
       </div>
     </div>
 
@@ -34,9 +37,7 @@
       <div class="meta">
         <button id="mode-solo" class="pill primary">1 Jugador</button>
         <button id="mode-multi" class="pill">Multijugador (online)</button>
-         <!-- Botón sonido -->
-        <button id="btn-sound" class="pill">🔈 Sonido: ON</button>
-        </div>
+      </div>
 
       <div class="row grid-2">
         <!-- IZQUIERDA -->
@@ -65,7 +66,6 @@
 
           <label class="small">Categorías</label>
           <div class="meta" id="cats"></div>
-          <!--span class="hint">Tip: combiná “Fake News” + “Privacidad”.</span-->
         </div>
 
         <!-- DERECHA -->
@@ -196,7 +196,7 @@
             <tbody id="lb-body"></tbody>
           </table>
         </div>
-        <p class="small">El ranking se guarda en este navegador/equipo (LocalStorage).</p>
+        <p class="small">El ranking se guarda en este navegador/equipo y también en la nube (Firebase).</p>
       </div>
     </section>
 
