@@ -15,7 +15,7 @@ const FIREBASE_ENABLED = true;
 const firebaseConfig = {
   apiKey: "AIzaSyBUJLB57u7uw48G9LyRplDO-x8tQ8gVEGM",
   authDomain: "copa-387c8.firebaseapp.com",
-  databaseURL: "https://copa-387c8-default-rtdb.firebaseio.com",
+  databaseURL: "https://copa-387c8-default-rtdb.firebaseio.com/",
   projectId: "copa-387c8",
   storageBucket: "copa-387c8.appspot.com",
   messagingSenderId: "203974305127",
@@ -897,3 +897,4 @@ function init(){
   show("#screen-start");
 }
 init();
+
