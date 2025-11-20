@@ -214,6 +214,449 @@ const QUESTIONS = [
     explain: "Reportar y promover respeto ayuda a construir comunidad segura.",
     category: "Convivencia",
     tags: ["empatia"]
+  },
+    {
+    text: "Recibís un mensaje con un premio que dice 'ganaste un celular, hacé clic'. ¿Qué hacés?",
+    options: [
+      "Abro el link enseguida",
+      "Lo borro o lo reporto como spam",
+      "Le paso el link a mis amigos",
+      "Escribo mis datos por si es cierto"
+    ],
+    answer: 1,
+    explain: "Los sorteos falsos buscan tus datos o infectar el dispositivo. No abras enlaces sospechosos.",
+    category: "Seguridad",
+    tags: ["seguridad","critico"]
+  },
+  {
+    text: "Publicás una foto grupal. Un compañero te pide que la bajes. ¿Qué hacés?",
+    options: [
+      "La dejo igual, es mi red",
+      "La elimino o edito respetando su pedido",
+      "Le digo que exagere",
+      "Le bloqueo por quejarse"
+    ],
+    answer: 1,
+    explain: "Respetar la privacidad de otros refuerza la convivencia y el derecho a la propia imagen.",
+    category: "Derechos digitales",
+    tags: ["empatia","seguridad"]
+  },
+  {
+    text: "Descargás una app nueva que pide acceso a tus fotos, micrófono y contactos. ¿Qué hacés?",
+    options: [
+      "Acepto todo rápido para usarla",
+      "Leo para qué lo necesita antes de aceptar",
+      "Desinstalo sin mirar",
+      "Pido ayuda a un amigo para configurarla"
+    ],
+    answer: 1,
+    explain: "Leer los permisos ayuda a decidir si son razonables. Solo aceptá los necesarios.",
+    category: "Privacidad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Un amigo publica algo sobre vos sin consultarte. ¿Qué hacés?",
+    options: [
+      "Lo ignoro, seguro fue sin mala intención",
+      "Le pido que lo elimine con respeto",
+      "Le comento en público que lo borre",
+      "Lo denuncio sin decirle nada"
+    ],
+    answer: 1,
+    explain: "Dialogar primero de manera respetuosa promueve empatía y resolución pacífica.",
+    category: "Convivencia",
+    tags: ["empatia"]
+  },
+  {
+    text: "Tu contraseña tiene tu nombre y fecha de nacimiento. ¿Qué tan segura es?",
+    options: [
+      "Muy segura, nadie la adivina",
+      "Insegura, es fácil de adivinar",
+      "Segura si la cambio seguido",
+      "Sirve si la uso solo en una app"
+    ],
+    answer: 1,
+    explain: "Usar datos personales la hace predecible. Usá frases o combinaciones únicas.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Alguien te escribe por red social con una propuesta de trabajo muy buena. ¿Qué hacés?",
+    options: [
+      "Respondo y envío mis datos personales",
+      "Verifico perfil, empresa y contacto oficial antes de responder",
+      "Ignoro por completo",
+      "Paso el mensaje a otros"
+    ],
+    answer: 1,
+    explain: "Las estafas laborales suelen pedir datos o dinero. Siempre verificá la fuente.",
+    category: "Pensamiento crítico",
+    tags: ["critico","seguridad"]
+  },
+  {
+    text: "Tu dispositivo se calienta y anda lento. Aparecen publicidades raras. ¿Qué podría ser?",
+    options: [
+      "Un virus o app maliciosa",
+      "Normal, es por el calor",
+      "El fondo de pantalla pesado",
+      "Demasiadas fotos en la galería"
+    ],
+    answer: 0,
+    explain: "Podría haber software malicioso. Revisá apps instaladas y usá antivirus.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Publicás algo enojado y te arrepentís. ¿Qué hacés?",
+    options: [
+      "Lo borro y pido disculpas si fue ofensivo",
+      "Lo dejo, ya está publicado",
+      "Hago otro post aclarando",
+      "Le echo la culpa al autocorrector"
+    ],
+    answer: 0,
+    explain: "Rectificar y pedir disculpas demuestra responsabilidad digital.",
+    category: "Convivencia",
+    tags: ["empatia"]
+  },
+  {
+    text: "Tu profesor crea un grupo para la clase. ¿Qué reglas básicas deberían tener?",
+    options: [
+      "Hablar solo de tareas y con respeto",
+      "Mandar memes y audios a cualquier hora",
+      "Compartir lo que sea",
+      "Usar apodos para todos"
+    ],
+    answer: 0,
+    explain: "Definir normas claras evita conflictos y mejora la comunicación digital.",
+    category: "Convivencia",
+    tags: ["empatia","bienestar"]
+  },
+  {
+    text: "Te llega una encuesta pidiendo datos bancarios. ¿Qué hacés?",
+    options: [
+      "La lleno, parece seria",
+      "Reviso el remitente y dirección del sitio",
+      "La envío a conocidos para que participen",
+      "Pido ayuda a un amigo para completarla"
+    ],
+    answer: 1,
+    explain: "Nunca compartas datos financieros sin verificar origen y seguridad del sitio.",
+    category: "Seguridad",
+    tags: ["critico","seguridad"]
+  },
+  {
+    text: "Querés bajar música gratis de un sitio desconocido. ¿Qué riesgo hay?",
+    options: [
+      "Ninguno, es solo música",
+      "Podría tener virus o malware",
+      "Se borra al reiniciar",
+      "Solo ocupa espacio"
+    ],
+    answer: 1,
+    explain: "Descargas no seguras pueden instalar virus o robar datos. Usá fuentes confiables.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Pasás mucho tiempo en redes y dormís mal. ¿Qué estrategia ayuda?",
+    options: [
+      "Usar el celular hasta dormirme",
+      "Configurar horario de descanso y dejarlo lejos",
+      "Tomar café para aguantar más",
+      "Poner videos de fondo"
+    ],
+    answer: 1,
+    explain: "Reducir pantallas antes de dormir mejora el sueño y el bienestar digital.",
+    category: "Bienestar",
+    tags: ["bienestar"]
+  },
+  {
+    text: "Ves un comentario agresivo sobre otra persona. ¿Qué hacés?",
+    options: [
+      "Ignoro y sigo scrolleando",
+      "Respondo con respeto o lo reporto",
+      "Me uno a la discusión",
+      "Le saco captura para compartir"
+    ],
+    answer: 1,
+    explain: "Intervenir o reportar refuerza una convivencia respetuosa en línea.",
+    category: "Convivencia",
+    tags: ["empatia"]
+  },
+  {
+    text: "Un sitio pide aceptar cookies. ¿Qué conviene hacer?",
+    options: [
+      "Aceptar todas sin mirar",
+      "Revisar y rechazar las no necesarias",
+      "Cerrar la página directamente",
+      "Borrar las cookies manualmente cada día"
+    ],
+    answer: 1,
+    explain: "Rechazar cookies no esenciales protege tu privacidad y datos.",
+    category: "Privacidad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Un video viral muestra algo grave, pero no hay fuentes. ¿Qué hacés?",
+    options: [
+      "Lo comparto por si es verdad",
+      "Busco fuentes confiables antes de creer",
+      "Comento que es falso sin mirar",
+      "Ignoro y sigo"
+    ],
+    answer: 1,
+    explain: "Verificar antes de difundir evita propagar desinformación.",
+    category: "Fake News",
+    tags: ["critico"]
+  },
+  {
+    text: "Te ofrecen instalar un programa pirata 'sin virus'. ¿Qué hacés?",
+    options: [
+      "Lo instalo igual",
+      "No lo instalo y busco una versión legal o gratuita",
+      "Lo paso a mis amigos",
+      "Desactivo el antivirus para instalarlo"
+    ],
+    answer: 1,
+    explain: "El software ilegal puede traer virus y sanciones. Optá por versiones seguras o libres.",
+    category: "Seguridad",
+    tags: ["seguridad","critico"]
+  },
+  {
+    text: "Tenés 100 notificaciones sin leer. ¿Qué podés hacer para manejarlo mejor?",
+    options: [
+      "Desactivar notificaciones innecesarias",
+      "Abrir todo para no perder nada",
+      "Ignorarlas por semanas",
+      "Cambiar de teléfono"
+    ],
+    answer: 0,
+    explain: "Gestionar notificaciones reduce estrés y mejora concentración.",
+    category: "Bienestar",
+    tags: ["bienestar"]
+  },
+  {
+    text: "Un desconocido te pide amistad y tienen 10 amigos en común. ¿Qué hacés?",
+    options: [
+      "Lo acepto por los amigos en común",
+      "Reviso perfil y si no lo conozco, no acepto",
+      "Le escribo para ver quién es",
+      "Acepto y le paso mi número"
+    ],
+    answer: 1,
+    explain: "No todos los contactos comunes son reales. Revisá antes de aceptar.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Querés publicar tu ubicación en tiempo real. ¿Qué deberías considerar?",
+    options: [
+      "Nada, todos lo hacen",
+      "Esperar a irte del lugar antes de publicarlo",
+      "Poner la dirección exacta",
+      "Etiquetar a todos los amigos"
+    ],
+    answer: 1,
+    explain: "Evitar publicar ubicación en vivo protege tu seguridad y privacidad.",
+    category: "Privacidad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Un compañero sufre exclusión en un grupo online. ¿Qué acción ayuda más?",
+    options: [
+      "Salir del grupo",
+      "Incluirlo en otras conversaciones y avisar al docente",
+      "Ignorar el tema",
+      "Grabar lo que pasa para después"
+    ],
+    answer: 1,
+    explain: "Incluir y pedir ayuda a adultos frena la exclusión digital.",
+    category: "Convivencia",
+    tags: ["empatia"]
+  },
+  {
+    text: "Te ofrecen un 'challenge' peligroso en redes. ¿Qué hacés?",
+    options: [
+      "Lo hago para no quedar afuera",
+      "Analizo los riesgos y no participo",
+      "Miro cómo lo hacen otros",
+      "Invito a mis amigos"
+    ],
+    answer: 1,
+    explain: "Pensar antes de actuar evita lesiones o exposición. Elegí cuidarte.",
+    category: "Bienestar",
+    tags: ["bienestar","critico"]
+  },
+  {
+    text: "Tu cámara se prende sola sin aviso. ¿Qué deberías hacer?",
+    options: [
+      "Cubrirla y revisar permisos o malware",
+      "Ignorarlo",
+      "Apagar el Wi-Fi",
+      "Reiniciar muchas veces"
+    ],
+    answer: 0,
+    explain: "Podría ser un acceso remoto no autorizado. Revisá apps y permisos.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Un influencer dice que una vacuna es peligrosa sin mostrar pruebas. ¿Qué hacés?",
+    options: [
+      "Le creo, tiene muchos seguidores",
+      "Verifico información en fuentes científicas oficiales",
+      "Lo comparto con advertencia",
+      "Dejo un comentario enojado"
+    ],
+    answer: 1,
+    explain: "La popularidad no garantiza veracidad. Contrastá con fuentes oficiales.",
+    category: "Fake News",
+    tags: ["critico"]
+  },
+  {
+    text: "Tenés demasiadas apps que no usás. ¿Qué conviene hacer?",
+    options: [
+      "Dejarlas por si acaso",
+      "Desinstalar las que no usás",
+      "Desactivar el Wi-Fi",
+      "No actualizar el sistema"
+    ],
+    answer: 1,
+    explain: "Eliminar apps innecesarias libera espacio y reduce riesgos de seguridad.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Recibís mensajes agresivos anónimos. ¿Qué hacés?",
+    options: [
+      "Contesto con insultos",
+      "No respondo, guardo evidencia y bloqueo/reportar",
+      "Le cuento a mis amigos",
+      "Borro la cuenta"
+    ],
+    answer: 1,
+    explain: "Bloquear, guardar evidencia y reportar protege tu integridad digital.",
+    category: "Convivencia",
+    tags: ["empatia","seguridad"]
+  },
+  {
+    text: "Tu grupo crea un meme sobre un compañero. ¿Participás?",
+    options: [
+      "Sí, es solo humor",
+      "No, puede ser ofensivo y prefiero no participar",
+      "Solo si todos se ríen",
+      "Lo reenvío sin pensar"
+    ],
+    answer: 1,
+    explain: "Evitar burlas refuerza la convivencia y el respeto online.",
+    category: "Convivencia",
+    tags: ["empatia"]
+  },
+  {
+    text: "Querés proteger tus archivos importantes. ¿Qué deberías hacer?",
+    options: [
+      "Guardarlos solo en el celular",
+      "Hacer copia en la nube o disco externo",
+      "Mandarlos por WhatsApp",
+      "Subirlos a cualquier red"
+    ],
+    answer: 1,
+    explain: "Respaldar archivos en lugares seguros evita pérdidas o robos de datos.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Te ofrecen internet gratis a cambio de registrarte con tus datos. ¿Qué hacés?",
+    options: [
+      "Me registro sin dudar",
+      "Leo condiciones y evito si piden datos sensibles",
+      "Acepto porque todos lo hacen",
+      "Uso el Wi-Fi y luego cambio mi contraseña"
+    ],
+    answer: 1,
+    explain: "Los servicios gratuitos pueden recopilar tus datos. Verificá condiciones antes de usar.",
+    category: "Privacidad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Publicás tu boletín de notas en redes. ¿Qué riesgo hay?",
+    options: [
+      "Ninguno, es mi logro",
+      "Revela datos personales o del centro educativo",
+      "Solo lo ven mis amigos",
+      "Me felicitan más"
+    ],
+    answer: 1,
+    explain: "Las imágenes con datos personales pueden usarse indebidamente. Cuidá tu información.",
+    category: "Privacidad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Recibís una cadena que dice 'reenviá para no perder tu cuenta'. ¿Qué hacés?",
+    options: [
+      "La reenvío a todos",
+      "La elimino y no la comparto",
+      "Le saco captura",
+      "Pregunto si es verdad en el grupo"
+    ],
+    answer: 1,
+    explain: "Las cadenas suelen ser falsas o phishing. No las compartas.",
+    category: "Fake News",
+    tags: ["critico","seguridad"]
+  },
+  {
+    text: "Tu dispositivo pide una actualización del sistema. ¿Qué hacés?",
+    options: [
+      "La ignoro, demora mucho",
+      "Actualizo cuando tengo batería y Wi-Fi",
+      "Apago el celular",
+      "Le pido a otro que lo actualice"
+    ],
+    answer: 1,
+    explain: "Las actualizaciones corrigen fallos de seguridad. Son clave para proteger tu equipo.",
+    category: "Seguridad",
+    tags: ["seguridad"]
+  },
+  {
+    text: "Estás por publicar una historia con alguien que no pidió aparecer. ¿Qué hacés?",
+    options: [
+      "La publico igual, es divertida",
+      "Pido permiso antes de subirla",
+      "Le tapo la cara con un emoji",
+      "Subo solo una parte"
+    ],
+    answer: 1,
+    explain: "Pedir permiso respeta la imagen y privacidad de las demás personas.",
+    category: "Derechos digitales",
+    tags: ["empatia","seguridad"]
+  }
+  ,
+  {
+    text: "Un día del mes de febrero del 2025 entre mil mujeres fuimos convocadas 60 de ellas divididas en dos grupos. La propuesta era cursar el programa rumbo que cursaríamos 3 años en uno.",
+    options: [
+      "Aceptar sin pensar",
+      "Leer bien la información antes de aceptar",
+      "Comentar en redes",
+      "Preguntarle a un amigo"
+    ],
+    answer: 1,
+    explain: "Leer bien la información antes de aceptar es clave para tomar buenas decisiones.",
+    category: "Convivencia",
+    tags: ["empatia"]
+  },
+  {
+    text: "Todo un desafío conocer distintas personalidades, historias de vida de madres con una oportunidad única.",
+    options: [
+      "Ignorarlas",
+      "Compartir experiencias y apoyarse mutuamente",
+      "Competir entre todas",
+      "No hablar con nadie"
+    ],
+    answer: 1,
+    explain: "Compartir experiencias fortalece la convivencia y la empatía.",
+    category: "Convivencia",
+    tags: ["empatia"]
   }
 ];
 
@@ -387,11 +830,24 @@ function mountStart(){
   // Ranking
   $("#btn-start-lb-full")?.addEventListener("click", ()=>{ renderLeaderboard(); show("#screen-leaderboard"); });
   $("#btn-back-home")?.addEventListener("click", ()=> show("#screen-start"));
-  $("#btn-clear")?.addEventListener("click", ()=>{
-    if(confirm("¿Seguro que querés borrar el histórico local?")){
-      clearScoresLocal(); renderLeaderboard();
+ $("#btn-clear")?.addEventListener("click", () => {
+  if (confirm("¿Seguro que querés borrar TODO el ranking (local + online)?")){
+
+    // 1) Borrar local
+    clearScoresLocal();
+
+    // 2) Borrar en Firebase
+    if (FIREBASE_ENABLED && fbDb){
+      fbDb.ref("/scores").remove()
+        .then(() => console.log("🔥 Ranking global borrado"))
+        .catch(err => console.warn("⚠️ No se pudo borrar Firebase:", err));
     }
-  });
+
+    // 3) Actualizar pantalla
+    renderLeaderboard();
+  }
+});
+
   $("#see-leaderboard")?.addEventListener("click", ()=>{ renderLeaderboard(); show("#screen-leaderboard"); });
   $("#share")?.addEventListener("click", shareScore);
 
